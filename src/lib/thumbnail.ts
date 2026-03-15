@@ -21,11 +21,7 @@ export async function maybeGenerateThumbnail(
 
   await writeFile(promptFile, prompt, 'utf8');
 
-  const command = config.thumbnailCommand
-    .replace('{promptFile}', shellEscape(promptFile))
-    .replace('{outputPath}', shellEscape(outputPath));
-
-  await exec(command, path.resolve(vaultRoot));
+  await exec(config.thumbnailCommand, path.resolve(vaultRoot), { promptFile, outputPath });
   return path.relative(vaultRoot, outputPath).replace(/\\/g, '/');
 }
 
@@ -40,17 +36,17 @@ function buildPrompt(config: AppConfig, digest: DailyDigest): string {
   ].join('\n');
 }
 
-function exec(command: string, cwd: string): Promise<void> {
+function exec(commandTemplate: string, cwd: string, vars: Record<string, string>): Promise<void> {
+  const parts = commandTemplate.trim().split(/\s+/).map((token) =>
+    Object.entries(vars).reduce((t, [k, v]) => t.replace(`{${k}}`, v), token)
+  );
+  const [cmd, ...args] = parts;
   return new Promise((resolve, reject) => {
-    const child = spawn(command, { cwd, shell: true, stdio: 'inherit' });
+    const child = spawn(cmd, args, { cwd, shell: false, stdio: 'inherit' });
     child.on('exit', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`Thumbnail command failed with exit code ${code ?? 'unknown'}`));
     });
     child.on('error', reject);
   });
-}
-
-function shellEscape(input: string): string {
-  return `'${input.replace(/'/g, `'\\''`)}'`;
 }
