@@ -1,0 +1,27 @@
+{
+  "name": "claude-code-rss-obsidian-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "run": "tsx src/index.ts",
+    "check": "tsc --noEmit",
+    "rsshub:up": "docker compose -f docker/docker-compose.rsshub.yml up -d",
+    "rsshub:down": "docker compose -f docker/docker-compose.rsshub.yml down",
+    "rsshub:logs": "docker compose -f docker/docker-compose.rsshub.yml logs -f"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "rss-parser": "^3.13.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
