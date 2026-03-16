@@ -7,6 +7,9 @@
     "dev": "tsx src/index.ts",
     "run": "tsx src/index.ts",
     "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "rsshub:up": "docker compose -f docker/docker-compose.rsshub.yml up -d",
     "rsshub:down": "docker compose -f docker/docker-compose.rsshub.yml down",
     "rsshub:logs": "docker compose -f docker/docker-compose.rsshub.yml logs -f"
@@ -18,8 +21,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.14",
+    "@vitest/coverage-v8": "^4.1.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.0"
   },
   "engines": {
     "node": ">=20"
