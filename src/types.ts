@@ -54,6 +54,9 @@ export type AppConfig = {
   modelText: string;
   thumbnailPromptStyle: string;
   requestTimeoutMs: number;
+  storageType: 'local' | 'dropbox';
+  dropboxAccessToken?: string;
+  dropboxBasePath?: string;
 };
 
 export type AccountConfig = {

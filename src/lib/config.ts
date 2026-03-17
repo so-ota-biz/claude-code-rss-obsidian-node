@@ -28,7 +28,10 @@ const schema = z.object({
   THUMBNAIL_IMAGE_EXT: z.string().default('png'),
   MODEL_TEXT: z.string().default('gemini-2.5-flash-lite'),
   THUMBNAIL_PROMPT_STYLE: z.string().default('clean, modern, editorial, dark, subtle terminal motif, no text'),
-  REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000)
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  STORAGE_TYPE: z.enum(['local', 'dropbox']).default('local'),
+  DROPBOX_ACCESS_TOKEN: z.string().optional(),
+  DROPBOX_BASE_PATH: z.string().default('/')
 });
 
 const bool = (value: string) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
@@ -78,6 +81,12 @@ function loadTargetAccounts(envValue?: string): string[] {
 
 export function loadConfig(): AppConfig {
   const env = schema.parse(process.env);
+  
+  // Dropbox設定のバリデーション
+  if (env.STORAGE_TYPE === 'dropbox' && !env.DROPBOX_ACCESS_TOKEN) {
+    throw new Error('DROPBOX_ACCESS_TOKEN is required when STORAGE_TYPE is "dropbox"');
+  }
+  
   return {
     geminiApiKey: env.GEMINI_API_KEY,
     rsshubBaseUrl: env.RSSHUB_BASE_URL.replace(/\/$/, ''),
@@ -101,6 +110,9 @@ export function loadConfig(): AppConfig {
     thumbnailImageExt: env.THUMBNAIL_IMAGE_EXT.replace(/^\./, ''),
     modelText: env.MODEL_TEXT,
     thumbnailPromptStyle: env.THUMBNAIL_PROMPT_STYLE,
-    requestTimeoutMs: env.REQUEST_TIMEOUT_MS
+    requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
+    storageType: env.STORAGE_TYPE,
+    dropboxAccessToken: env.DROPBOX_ACCESS_TOKEN,
+    dropboxBasePath: env.DROPBOX_BASE_PATH
   };
 }
