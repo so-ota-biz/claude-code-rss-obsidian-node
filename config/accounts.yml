@@ -4,6 +4,6 @@ accounts:
   - name: "anthropicai"
     description: "Anthropic official account"
     category: "AI Company"
-  - name: "claudeai" 
+  - name: "claudeai"
     description: "Claude AI official account"
     category: "AI Product"
