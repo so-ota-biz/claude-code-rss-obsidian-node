@@ -69,6 +69,45 @@ OBSIDIAN_VAULT_PATH=/absolute/path/to/ObsidianVault
 TARGET_ACCOUNTS=anthropicai,claudeai
 ```
 
+## ストレージ設定
+
+デフォルトはローカルファイルシステム（`STORAGE_TYPE=local`）への保存ですが、Dropbox APIを使った保存に切り替えることも可能です。
+
+### ローカル保存（デフォルト）
+
+```env
+# STORAGE_TYPE=local  # デフォルトなので省略可能
+OBSIDIAN_VAULT_PATH=/absolute/path/to/ObsidianVault
+```
+
+### Dropbox保存
+
+```env
+STORAGE_TYPE=dropbox
+DROPBOX_ACCESS_TOKEN=your_dropbox_access_token_here
+DROPBOX_BASE_PATH=/  # オプション、デフォルトは "/"
+```
+
+**Dropbox Access Tokenの取得方法**:
+
+1. [Dropbox App Console](https://www.dropbox.com/developers/apps) にアクセス
+2. "Create app" をクリック
+3. API は "Scoped access" を選択
+4. App folder か Full Dropbox かを選択（Full Dropboxを推奨）
+5. App名を入力して作成
+6. "Permissions" タブで以下の権限を有効化：
+   - `files.metadata.write`
+   - `files.metadata.read` 
+   - `files.content.write`
+   - `files.content.read`
+7. "Settings" タブの "Generated access token" セクションで "Generate" をクリック
+8. 生成されたトークンを `DROPBOX_ACCESS_TOKEN` に設定
+
+**注意**: 
+- Dropbox保存時は、`OBSIDIAN_VAULT_PATH` の設定値は使用されません
+- `DROPBOX_BASE_PATH` でDropbox内の保存先ルートパスを指定できます（例: `/MyApp/`）
+- Dropbox保存時はObsidianでの直接閲覧はできません。必要に応じてDropboxからローカルに同期してください
+
 ### 画像生成 CLI を使う場合
 
 `THUMBNAIL_COMMAND` は外部コマンドのテンプレートです。
