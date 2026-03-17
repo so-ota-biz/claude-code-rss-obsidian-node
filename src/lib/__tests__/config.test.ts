@@ -1,14 +1,24 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadConfig } from '../config.js';
+import { writeFileSync, unlinkSync, mkdirSync, rmSync, existsSync } from 'fs';
+import { join } from 'path';
 
-const REQUIRED_ENV = {
+const REQUIRED_ENV_WITH_ACCOUNTS = {
   GEMINI_API_KEY: 'test-api-key',
   RSSHUB_BASE_URL: 'http://localhost:1200',
   OBSIDIAN_VAULT_PATH: '/tmp/vault',
   TARGET_ACCOUNTS: 'anthropicai,claudeai'
 };
 
+const REQUIRED_ENV_WITHOUT_ACCOUNTS = {
+  GEMINI_API_KEY: 'test-api-key',
+  RSSHUB_BASE_URL: 'http://localhost:1200',
+  OBSIDIAN_VAULT_PATH: '/tmp/vault'
+};
+
 let savedEnv: Record<string, string | undefined> = {};
+const TEST_CONFIG_DIR = join(process.cwd(), 'config');
+const TEST_CONFIG_FILE = join(TEST_CONFIG_DIR, 'accounts.yml');
 
 function setEnv(vars: Record<string, string | undefined>) {
   for (const [key, value] of Object.entries(vars)) {
@@ -21,13 +31,29 @@ function setEnv(vars: Record<string, string | undefined>) {
   }
 }
 
+function createTestConfigFile(content: string) {
+  if (!existsSync(TEST_CONFIG_DIR)) {
+    mkdirSync(TEST_CONFIG_DIR, { recursive: true });
+  }
+  writeFileSync(TEST_CONFIG_FILE, content, 'utf-8');
+}
+
+function removeTestConfigFile() {
+  if (existsSync(TEST_CONFIG_FILE)) {
+    unlinkSync(TEST_CONFIG_FILE);
+  }
+}
+
 beforeEach(() => {
   savedEnv = {};
   // Remove dotenv-loaded vars to avoid test pollution
-  for (const key of Object.keys(REQUIRED_ENV)) {
+  const allEnvKeys = [...Object.keys(REQUIRED_ENV_WITH_ACCOUNTS), ...Object.keys(REQUIRED_ENV_WITHOUT_ACCOUNTS)];
+  for (const key of allEnvKeys) {
     savedEnv[key] = process.env[key];
     delete process.env[key];
   }
+  // Remove any existing test config file
+  removeTestConfigFile();
 });
 
 afterEach(() => {
@@ -38,84 +64,157 @@ afterEach(() => {
       process.env[key] = value;
     }
   }
+  // Clean up test config file
+  removeTestConfigFile();
 });
 
 describe('loadConfig', () => {
-  it('returns AppConfig when all required env vars are set', () => {
-    setEnv(REQUIRED_ENV);
-    const config = loadConfig();
-    expect(config.geminiApiKey).toBe('test-api-key');
-    expect(config.rsshubBaseUrl).toBe('http://localhost:1200');
-    expect(config.obsidianVaultPath).toBe('/tmp/vault');
-    expect(config.targetAccounts).toEqual(['anthropicai', 'claudeai']);
+  describe('Environment variable configuration', () => {
+    it('returns AppConfig when all required env vars are set', () => {
+      setEnv(REQUIRED_ENV_WITH_ACCOUNTS);
+      const config = loadConfig();
+      expect(config.geminiApiKey).toBe('test-api-key');
+      expect(config.rsshubBaseUrl).toBe('http://localhost:1200');
+      expect(config.obsidianVaultPath).toBe('/tmp/vault');
+      expect(config.targetAccounts).toEqual(['anthropicai', 'claudeai']);
+    });
+
+    it('splits TARGET_ACCOUNTS by comma and trims whitespace', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, TARGET_ACCOUNTS: ' user1 , user2 , user3 ' });
+      const config = loadConfig();
+      expect(config.targetAccounts).toEqual(['user1', 'user2', 'user3']);
+    });
   });
 
-  it('splits TARGET_ACCOUNTS by comma and trims whitespace', () => {
-    setEnv({ ...REQUIRED_ENV, TARGET_ACCOUNTS: ' user1 , user2 , user3 ' });
-    const config = loadConfig();
-    expect(config.targetAccounts).toEqual(['user1', 'user2', 'user3']);
+  describe('YAML configuration file', () => {
+    it('loads accounts from YAML file when TARGET_ACCOUNTS is not set', () => {
+      createTestConfigFile(`
+accounts:
+  - name: "user1"
+    description: "User 1"
+    category: "Test"
+  - name: "user2"
+    description: "User 2"
+    category: "Test"
+`);
+      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      const config = loadConfig();
+      expect(config.targetAccounts).toEqual(['user1', 'user2']);
+    });
+
+    it('prioritizes TARGET_ACCOUNTS environment variable over YAML file', () => {
+      createTestConfigFile(`
+accounts:
+  - name: "yaml_user1"
+  - name: "yaml_user2"
+`);
+      setEnv({ ...REQUIRED_ENV_WITHOUT_ACCOUNTS, TARGET_ACCOUNTS: 'env_user1,env_user2' });
+      const config = loadConfig();
+      expect(config.targetAccounts).toEqual(['env_user1', 'env_user2']);
+    });
+
+    it('filters out accounts with empty names from YAML', () => {
+      createTestConfigFile(`
+accounts:
+  - name: "valid_user"
+  - name: ""
+  - name: "  "
+  - name: "another_valid"
+`);
+      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      const config = loadConfig();
+      expect(config.targetAccounts).toEqual(['valid_user', 'another_valid']);
+    });
+
+    it('throws error when YAML file has invalid structure', () => {
+      createTestConfigFile(`
+not_accounts:
+  - name: "user1"
+`);
+      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      expect(() => loadConfig()).toThrow('Invalid config format: accounts must be an array');
+    });
+
+    it('throws error when neither TARGET_ACCOUNTS nor YAML file is available', () => {
+      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      expect(() => loadConfig()).toThrow('No target accounts configured');
+    });
+
+    it('throws error when YAML file contains invalid YAML syntax', () => {
+      createTestConfigFile(`
+accounts:
+  - name: "user1
+    invalid yaml syntax
+`);
+      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      expect(() => loadConfig()).toThrow(/Failed to load accounts configuration/);
+    });
   });
 
-  it('removes trailing slash from RSSHUB_BASE_URL', () => {
-    setEnv({ ...REQUIRED_ENV, RSSHUB_BASE_URL: 'http://localhost:1200/' });
-    const config = loadConfig();
-    expect(config.rsshubBaseUrl).toBe('http://localhost:1200');
+  describe('Other configuration options', () => {
+    it('removes trailing slash from RSSHUB_BASE_URL', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, RSSHUB_BASE_URL: 'http://localhost:1200/' });
+      const config = loadConfig();
+      expect(config.rsshubBaseUrl).toBe('http://localhost:1200');
+    });
+
+    it('applies default values', () => {
+      setEnv(REQUIRED_ENV_WITH_ACCOUNTS);
+      const config = loadConfig();
+      expect(config.timezone).toBe('Asia/Tokyo');
+      expect(config.modelText).toBe('gemini-2.5-flash-lite');
+      expect(config.maxPostsPerAccount).toBe(20);
+      expect(config.maxHighlights).toBe(5);
+      expect(config.requestTimeoutMs).toBe(30000);
+      expect(config.thumbnailImageExt).toBe('png');
+    });
+
+    it('parses boolean env vars: "true" → true', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, ENABLE_TRANSLATION: 'true', SKIP_RETWEETS: 'true' });
+      const config = loadConfig();
+      expect(config.enableTranslation).toBe(true);
+      expect(config.skipRetweets).toBe(true);
+    });
+
+    it('parses boolean env vars: "1" → true', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, ENABLE_DIGEST: '1' });
+      const config = loadConfig();
+      expect(config.enableDigest).toBe(true);
+    });
+
+    it('parses boolean env vars: "false" → false', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, ENABLE_THUMBNAIL: 'false' });
+      const config = loadConfig();
+      expect(config.enableThumbnail).toBe(false);
+    });
+
+    it('parses boolean env vars: "0" → false', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, SKIP_REPLIES: '0' });
+      const config = loadConfig();
+      expect(config.skipReplies).toBe(false);
+    });
+
+    it('removes leading dot from THUMBNAIL_IMAGE_EXT', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, THUMBNAIL_IMAGE_EXT: '.webp' });
+      const config = loadConfig();
+      expect(config.thumbnailImageExt).toBe('webp');
+    });
   });
 
-  it('applies default values', () => {
-    setEnv(REQUIRED_ENV);
-    const config = loadConfig();
-    expect(config.timezone).toBe('Asia/Tokyo');
-    expect(config.modelText).toBe('gemini-2.5-flash-lite');
-    expect(config.maxPostsPerAccount).toBe(20);
-    expect(config.maxHighlights).toBe(5);
-    expect(config.requestTimeoutMs).toBe(30000);
-    expect(config.thumbnailImageExt).toBe('png');
-  });
+  describe('Error cases', () => {
+    it('throws when GEMINI_API_KEY is empty', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, GEMINI_API_KEY: '' });
+      expect(() => loadConfig()).toThrow();
+    });
 
-  it('parses boolean env vars: "true" → true', () => {
-    setEnv({ ...REQUIRED_ENV, ENABLE_TRANSLATION: 'true', SKIP_RETWEETS: 'true' });
-    const config = loadConfig();
-    expect(config.enableTranslation).toBe(true);
-    expect(config.skipRetweets).toBe(true);
-  });
+    it('throws when RSSHUB_BASE_URL is not a valid URL', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, RSSHUB_BASE_URL: 'not-a-url' });
+      expect(() => loadConfig()).toThrow();
+    });
 
-  it('parses boolean env vars: "1" → true', () => {
-    setEnv({ ...REQUIRED_ENV, ENABLE_DIGEST: '1' });
-    const config = loadConfig();
-    expect(config.enableDigest).toBe(true);
-  });
-
-  it('parses boolean env vars: "false" → false', () => {
-    setEnv({ ...REQUIRED_ENV, ENABLE_THUMBNAIL: 'false' });
-    const config = loadConfig();
-    expect(config.enableThumbnail).toBe(false);
-  });
-
-  it('parses boolean env vars: "0" → false', () => {
-    setEnv({ ...REQUIRED_ENV, SKIP_REPLIES: '0' });
-    const config = loadConfig();
-    expect(config.skipReplies).toBe(false);
-  });
-
-  it('removes leading dot from THUMBNAIL_IMAGE_EXT', () => {
-    setEnv({ ...REQUIRED_ENV, THUMBNAIL_IMAGE_EXT: '.webp' });
-    const config = loadConfig();
-    expect(config.thumbnailImageExt).toBe('webp');
-  });
-
-  it('throws when GEMINI_API_KEY is empty', () => {
-    setEnv({ ...REQUIRED_ENV, GEMINI_API_KEY: '' });
-    expect(() => loadConfig()).toThrow();
-  });
-
-  it('throws when RSSHUB_BASE_URL is not a valid URL', () => {
-    setEnv({ ...REQUIRED_ENV, RSSHUB_BASE_URL: 'not-a-url' });
-    expect(() => loadConfig()).toThrow();
-  });
-
-  it('throws when GEMINI_API_KEY is missing', () => {
-    setEnv({ ...REQUIRED_ENV, GEMINI_API_KEY: undefined });
-    expect(() => loadConfig()).toThrow();
+    it('throws when GEMINI_API_KEY is missing', () => {
+      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, GEMINI_API_KEY: undefined });
+      expect(() => loadConfig()).toThrow();
+    });
   });
 });

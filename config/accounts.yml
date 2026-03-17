@@ -1,0 +1,9 @@
+# RSS収集対象アカウント設定
+# TARGET_ACCOUNTS環境変数の代替として使用
+accounts:
+  - name: "anthropicai"
+    description: "Anthropic official account"
+    category: "AI Company"
+  - name: "claudeai" 
+    description: "Claude AI official account"
+    category: "AI Product"
