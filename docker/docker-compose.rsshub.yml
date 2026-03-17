@@ -6,7 +6,7 @@ services:
     ports:
       - "1200:1200"
     env_file:
-      - ../examples/rsshub.env.example
+      - ./.env
     depends_on:
       - redis
 
