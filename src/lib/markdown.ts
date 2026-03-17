@@ -1,18 +1,20 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DailyDigest, ProcessedPost } from '../types.js';
+import type { StorageProvider } from './storage.js';
 import { ensureDir, resolveVaultPath } from './fs.js';
 
 export async function writeDigestMarkdown(params: {
+  storage: StorageProvider;
   vaultRoot: string;
   outputSubdir: string;
   day: string;
   digest: DailyDigest;
   thumbnailRelativePath?: string;
 }): Promise<string> {
-  const { vaultRoot, outputSubdir, day, digest, thumbnailRelativePath } = params;
-  const dir = path.join(vaultRoot, outputSubdir);
-  await ensureDir(dir);
+  const { storage, vaultRoot, outputSubdir, day, digest, thumbnailRelativePath } = params;
+  
+  await storage.ensureDir(path.join(vaultRoot, outputSubdir));
 
   const body = [
     '---',
@@ -48,19 +50,20 @@ export async function writeDigestMarkdown(params: {
   ].join('\n');
 
   const filePath = resolveVaultPath(vaultRoot, outputSubdir, `${day}.md`);
-  await writeFile(filePath, body, 'utf8');
+  await storage.writeFile(filePath, body);
   return filePath;
 }
 
 export async function writeRawMarkdown(params: {
+  storage: StorageProvider;
   vaultRoot: string;
   rawSubdir: string;
   day: string;
   posts: ProcessedPost[];
 }): Promise<string> {
-  const { vaultRoot, rawSubdir, day, posts } = params;
-  const dir = path.join(vaultRoot, rawSubdir);
-  await ensureDir(dir);
+  const { storage, vaultRoot, rawSubdir, day, posts } = params;
+  
+  await storage.ensureDir(path.join(vaultRoot, rawSubdir));
 
   const lines = [
     '---',
@@ -91,7 +94,7 @@ export async function writeRawMarkdown(params: {
   }
 
   const filePath = resolveVaultPath(vaultRoot, rawSubdir, `${day}.md`);
-  await writeFile(filePath, lines.join('\n'), 'utf8');
+  await storage.writeFile(filePath, lines.join('\n'));
   return filePath;
 }
 

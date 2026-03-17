@@ -158,7 +158,7 @@ accounts:
       expect(config.rsshubBaseUrl).toBe('http://localhost:1200');
     });
 
-    it('applies default values', () => {
+    it('applies default values including storage settings', () => {
       setEnv(REQUIRED_ENV_WITH_ACCOUNTS);
       const config = loadConfig();
       expect(config.timezone).toBe('Asia/Tokyo');
@@ -167,6 +167,8 @@ accounts:
       expect(config.maxHighlights).toBe(5);
       expect(config.requestTimeoutMs).toBe(30000);
       expect(config.thumbnailImageExt).toBe('png');
+      expect(config.storageType).toBe('local');
+      expect(config.dropboxBasePath).toBe('/');
     });
 
     it('parses boolean env vars: "true" → true', () => {
@@ -198,6 +200,27 @@ accounts:
       setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, THUMBNAIL_IMAGE_EXT: '.webp' });
       const config = loadConfig();
       expect(config.thumbnailImageExt).toBe('webp');
+    });
+
+    it('configures dropbox storage when STORAGE_TYPE is dropbox', () => {
+      setEnv({ 
+        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+        STORAGE_TYPE: 'dropbox',
+        DROPBOX_ACCESS_TOKEN: 'test-token',
+        DROPBOX_BASE_PATH: '/custom/path'
+      });
+      const config = loadConfig();
+      expect(config.storageType).toBe('dropbox');
+      expect(config.dropboxAccessToken).toBe('test-token');
+      expect(config.dropboxBasePath).toBe('/custom/path');
+    });
+
+    it('throws error when STORAGE_TYPE is dropbox but DROPBOX_ACCESS_TOKEN is missing', () => {
+      setEnv({ 
+        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+        STORAGE_TYPE: 'dropbox'
+      });
+      expect(() => loadConfig()).toThrow('DROPBOX_ACCESS_TOKEN is required when STORAGE_TYPE is "dropbox"');
     });
   });
 

@@ -2,10 +2,12 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { AppConfig, DailyDigest } from '../types.js';
+import type { StorageProvider } from './storage.js';
 import { ensureDir } from './fs.js';
 
 export async function maybeGenerateThumbnail(
   config: AppConfig,
+  storage: StorageProvider,
   digest: DailyDigest,
   day: string,
   vaultRoot: string
@@ -13,13 +15,13 @@ export async function maybeGenerateThumbnail(
   if (!config.enableThumbnail || !config.thumbnailCommand) return undefined;
 
   const assetsDir = path.join(vaultRoot, config.assetsSubdir);
-  await ensureDir(assetsDir);
+  await storage.ensureDir(assetsDir);
 
   const promptFile = path.join(assetsDir, `${day}.thumbnail-prompt.txt`);
   const outputPath = path.join(assetsDir, `${day}.${config.thumbnailImageExt}`);
   const prompt = buildPrompt(config, digest);
 
-  await writeFile(promptFile, prompt, 'utf8');
+  await storage.writeFile(promptFile, prompt);
 
   await exec(config.thumbnailCommand, path.resolve(vaultRoot), { promptFile, outputPath });
   return path.relative(vaultRoot, outputPath).replace(/\\/g, '/');
