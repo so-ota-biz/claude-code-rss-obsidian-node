@@ -56,6 +56,16 @@ export type AppConfig = {
   requestTimeoutMs: number;
 };
 
+export type AccountConfig = {
+  name: string;
+  description?: string;
+  category?: string;
+};
+
+export type AccountsConfig = {
+  accounts: AccountConfig[];
+};
+
 export type State = {
   lastRunDate?: string;
   seenIds?: string[];

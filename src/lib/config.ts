@@ -1,13 +1,16 @@
 import 'dotenv/config';
 import { z } from 'zod';
-import type { AppConfig } from '../types.js';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { parse as parseYaml } from 'yaml';
+import type { AppConfig, AccountsConfig } from '../types.js';
 
 const schema = z.object({
   GEMINI_API_KEY: z.string().min(1),
   RSSHUB_BASE_URL: z.string().url(),
   RSSHUB_ROUTE_TEMPLATE: z.string().default('/twitter/user/:account'),
   OBSIDIAN_VAULT_PATH: z.string().min(1),
-  TARGET_ACCOUNTS: z.string().min(1),
+  TARGET_ACCOUNTS: z.string().optional(), // オプションに変更（設定ファイルとの共存のため）
   TIMEZONE: z.string().default('Asia/Tokyo'),
   OUTPUT_SUBDIR: z.string().default('AI Digest/Claude Code'),
   RAW_SUBDIR: z.string().default('AI Digest/Claude Code/raw'),
@@ -30,6 +33,49 @@ const schema = z.object({
 
 const bool = (value: string) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 
+// YAML設定ファイルを読み込む関数
+function loadAccountsFromYaml(): string[] {
+  const configPath = join(process.cwd(), 'config', 'accounts.yml');
+  
+  if (!existsSync(configPath)) {
+    return [];
+  }
+
+  try {
+    const yamlContent = readFileSync(configPath, 'utf-8');
+    const config: AccountsConfig = parseYaml(yamlContent);
+    
+    // バリデーション
+    if (!config.accounts || !Array.isArray(config.accounts)) {
+      throw new Error('Invalid config format: accounts must be an array');
+    }
+    
+    return config.accounts
+      .filter(account => account.name && account.name.trim())
+      .map(account => account.name.trim());
+  } catch (error) {
+    console.error('[error] Failed to load accounts.yml:', error);
+    throw new Error(`Failed to load accounts configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// アカウント一覧を取得する関数（環境変数優先、設定ファイルフォールバック）
+function loadTargetAccounts(envValue?: string): string[] {
+  // 環境変数が設定されている場合は優先
+  if (envValue && envValue.trim()) {
+    return envValue.split(',').map((value) => value.trim()).filter(Boolean);
+  }
+  
+  // 設定ファイルからロード
+  const accountsFromFile = loadAccountsFromYaml();
+  if (accountsFromFile.length > 0) {
+    return accountsFromFile;
+  }
+  
+  // どちらも設定されていない場合はエラー
+  throw new Error('No target accounts configured. Please set TARGET_ACCOUNTS environment variable or create config/accounts.yml');
+}
+
 export function loadConfig(): AppConfig {
   const env = schema.parse(process.env);
   return {
@@ -37,7 +83,7 @@ export function loadConfig(): AppConfig {
     rsshubBaseUrl: env.RSSHUB_BASE_URL.replace(/\/$/, ''),
     rsshubRouteTemplate: env.RSSHUB_ROUTE_TEMPLATE,
     obsidianVaultPath: env.OBSIDIAN_VAULT_PATH,
-    targetAccounts: env.TARGET_ACCOUNTS.split(',').map((value) => value.trim()).filter(Boolean),
+    targetAccounts: loadTargetAccounts(env.TARGET_ACCOUNTS),
     timezone: env.TIMEZONE,
     outputSubdir: env.OUTPUT_SUBDIR,
     rawSubdir: env.RAW_SUBDIR,
