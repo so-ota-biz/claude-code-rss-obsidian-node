@@ -138,4 +138,84 @@ describe('fetchPostsForAccount', () => {
     const result = await fetchPostsForAccount(baseConfig, 'user1', range);
     expect(result).toHaveLength(0);
   });
+
+  describe('error handling', () => {
+    it('handles 503 error and returns empty array', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      
+      mockParseURL.mockRejectedValue(new Error('Status code 503'));
+      const result = await fetchPostsForAccount(baseConfig, 'user1', range);
+      
+      expect(result).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith('[error] Account @user1: RSS feed unavailable (503 Service Unavailable)');
+      expect(consoleSpy).toHaveBeenCalledWith('[error] This is likely due to Twitter API configuration not being set up in RSSHub.');
+      expect(consoleSpy).toHaveBeenCalledWith('[error] Please check docs/troubleshooting.md for Twitter API setup instructions.');
+      expect(infoSpy).toHaveBeenCalledWith('[info] Continuing with other accounts...');
+      
+      consoleSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+
+    it('handles 404 error and returns empty array', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      
+      mockParseURL.mockRejectedValue(new Error('Status code 404'));
+      const result = await fetchPostsForAccount(baseConfig, 'user1', range);
+      
+      expect(result).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith('[error] Account @user1: Account not found (404)');
+      expect(infoSpy).toHaveBeenCalledWith('[info] Continuing with other accounts...');
+      
+      consoleSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+
+    it('handles 429 error and returns empty array', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      
+      mockParseURL.mockRejectedValue(new Error('Status code 429'));
+      const result = await fetchPostsForAccount(baseConfig, 'user1', range);
+      
+      expect(result).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith('[error] Account @user1: Rate limit exceeded (429)');
+      expect(consoleSpy).toHaveBeenCalledWith('[error] Please wait and try again later.');
+      expect(infoSpy).toHaveBeenCalledWith('[info] Continuing with other accounts...');
+      
+      consoleSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+
+    it('handles generic network error and returns empty array', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      
+      mockParseURL.mockRejectedValue(new Error('Network timeout'));
+      const result = await fetchPostsForAccount(baseConfig, 'user1', range);
+      
+      expect(result).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith('[error] Account @user1: Failed to fetch RSS feed - Network timeout');
+      expect(infoSpy).toHaveBeenCalledWith('[info] Continuing with other accounts...');
+      
+      consoleSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+
+    it('handles non-Error objects thrown from parseURL', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      
+      mockParseURL.mockRejectedValue('String error');
+      const result = await fetchPostsForAccount(baseConfig, 'user1', range);
+      
+      expect(result).toEqual([]);
+      expect(consoleSpy).toHaveBeenCalledWith('[error] Account @user1: Failed to fetch RSS feed - String error');
+      expect(infoSpy).toHaveBeenCalledWith('[info] Continuing with other accounts...');
+      
+      consoleSpy.mockRestore();
+      infoSpy.mockRestore();
+    });
+  });
 });
