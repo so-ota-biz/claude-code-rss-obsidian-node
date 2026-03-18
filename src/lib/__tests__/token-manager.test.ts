@@ -44,6 +44,7 @@ describe('TokenManager', () => {
     vi.clearAllMocks();
     config = {
       clientId: 'test-client-id',
+      clientSecret: 'test-client-secret',
       tokenStoragePath: '/test/tokens.json',
       refreshToken: 'test-refresh-token'
     };

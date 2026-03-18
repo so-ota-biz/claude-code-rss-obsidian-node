@@ -12,6 +12,7 @@ export interface TokenInfo {
 
 export interface TokenManagerConfig {
   clientId: string;
+  clientSecret: string;
   tokenStoragePath: string;
   refreshToken?: string; // For initial setup
 }
@@ -156,14 +157,9 @@ export class TokenManager {
     try {
       // Create a new Dropbox instance with refresh token for token refresh
       // Note: clientSecret is required for refresh token flow in Dropbox SDK v10
-      const clientSecret = process.env.DROPBOX_CLIENT_SECRET;
-      if (!clientSecret) {
-        throw new Error('DROPBOX_CLIENT_SECRET is required for Dropbox token refresh flow');
-      }
-
       const refreshDropbox = new Dropbox({
         clientId: this.config.clientId,
-        clientSecret,
+        clientSecret: this.config.clientSecret,
         refreshToken: this.currentTokenInfo.refreshToken,
       });
       
