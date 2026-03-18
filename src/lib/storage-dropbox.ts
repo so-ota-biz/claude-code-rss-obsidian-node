@@ -11,11 +11,26 @@ export class DropboxStorage implements StorageProvider {
   }
 
   private normalizePath(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/');
-    const withBase = this.basePath === '/' 
+    let normalized = filePath.replace(/\\/g, '/');
+    
+    // Dropboxローカルフォルダのパスが含まれている場合、それより後の部分のみ使用
+    const dropboxPattern = /.*\/Dropbox\/(.+)$/;
+    const match = normalized.match(dropboxPattern);
+    if (match) {
+      normalized = '/' + match[1];
+      // マッチした場合もbasePathとの結合処理を継続する
+    } else {
+      // 相対パスの場合（stateファイル等）、先頭にスラッシュを追加
+      if (!normalized.startsWith('/')) {
+        normalized = '/' + normalized;
+      }
+    }
+    
+    const result = this.basePath === '/' 
       ? normalized
-      : `${this.basePath.replace(/\/$/, '')}/${normalized}`;
-    return withBase.startsWith('/') ? withBase : `/${withBase}`;
+      : `${this.basePath.replace(/\/$/, '')}${normalized}`;
+    
+    return result;
   }
 
   async writeFile(filePath: string, content: string | Buffer): Promise<void> {
@@ -49,24 +64,8 @@ export class DropboxStorage implements StorageProvider {
   }
 
   async ensureDir(dirPath: string): Promise<void> {
-    try {
-      const path = this.normalizePath(dirPath);
-      
-      try {
-        await this.dropbox.filesGetMetadata({ path });
-      } catch (error: any) {
-        if (error?.status === 409) {
-          await this.dropbox.filesCreateFolderV2({
-            path,
-            autorename: false,
-          });
-        } else {
-          throw error;
-        }
-      }
-    } catch (error) {
-      throw new Error(`Failed to ensure directory in Dropbox: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    // Dropboxは filesUpload 時に自動でディレクトリを作成するためスキップ
+    return;
   }
 
   async exists(filePath: string): Promise<boolean> {

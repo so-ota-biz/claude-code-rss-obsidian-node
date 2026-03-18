@@ -14,7 +14,9 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const storage = createStorageProvider(config);
   const range = getTargetDateRange(config.timezone);
-  const stateDir = path.resolve(config.stateDir);
+  const stateDir = config.storageType === 'dropbox' 
+    ? config.stateDir  // Dropboxの場合は相対パスのまま使用
+    : path.resolve(config.stateDir);  // ローカルの場合は絶対パスに変換
   const state = await readState(storage, stateDir);
   const gemini = new GeminiClient(config.geminiApiKey, config.modelText, config.requestTimeoutMs);
 
