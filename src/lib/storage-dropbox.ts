@@ -112,7 +112,7 @@ export class DropboxStorage implements StorageProvider {
           // Force refresh token on 401 error (token may be revoked) and retry
           try {
             const newToken = await this.tokenManager.forceRefreshAccessToken();
-            this.dbx.setAccessToken(newToken);
+            this.dropbox.setAccessToken(newToken);
             continue;
           } catch (refreshError) {
             throw new Error(`Failed to ${operationName}: Token refresh failed - ${refreshError instanceof Error ? refreshError.message : 'Unknown error'}`);
