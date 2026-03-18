@@ -18,12 +18,12 @@ export class DropboxStorage implements StorageProvider {
     const match = normalized.match(dropboxPattern);
     if (match) {
       normalized = '/' + match[1];
-      return normalized;
-    }
-    
-    // 相対パスの場合（stateファイル等）、basePathと結合
-    if (!normalized.startsWith('/')) {
-      normalized = '/' + normalized;
+      // マッチした場合もbasePathとの結合処理を継続する
+    } else {
+      // 相対パスの場合（stateファイル等）、先頭にスラッシュを追加
+      if (!normalized.startsWith('/')) {
+        normalized = '/' + normalized;
+      }
     }
     
     const result = this.basePath === '/' 
