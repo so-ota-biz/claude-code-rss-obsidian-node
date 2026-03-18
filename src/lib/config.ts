@@ -31,6 +31,9 @@ const schema = z.object({
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   STORAGE_TYPE: z.enum(['local', 'dropbox']).default('local'),
   DROPBOX_ACCESS_TOKEN: z.string().optional(),
+  DROPBOX_CLIENT_ID: z.string().optional(),
+  DROPBOX_REFRESH_TOKEN: z.string().optional(),
+  DROPBOX_TOKEN_STORAGE_PATH: z.string().default('.state/dropbox-tokens.json'),
   DROPBOX_BASE_PATH: z.string().default('/')
 });
 
@@ -83,8 +86,20 @@ export function loadConfig(): AppConfig {
   const env = schema.parse(process.env);
   
   // Dropbox設定のバリデーション
-  if (env.STORAGE_TYPE === 'dropbox' && !env.DROPBOX_ACCESS_TOKEN) {
-    throw new Error('DROPBOX_ACCESS_TOKEN is required when STORAGE_TYPE is "dropbox"');
+  if (env.STORAGE_TYPE === 'dropbox') {
+    const hasAccessToken = !!env.DROPBOX_ACCESS_TOKEN;
+    const hasExplicitTokenStoragePath = !!process.env.DROPBOX_TOKEN_STORAGE_PATH;
+    const hasCompleteOAuthConfig = !!(env.DROPBOX_CLIENT_ID && (env.DROPBOX_REFRESH_TOKEN || hasExplicitTokenStoragePath));
+    
+    if (!hasAccessToken && !hasCompleteOAuthConfig) {
+      throw new Error(
+        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
+      );
+    }
+    
+    if (hasAccessToken && hasCompleteOAuthConfig) {
+      console.warn('[warning] Both DROPBOX_ACCESS_TOKEN and OAuth configuration provided. OAuth configuration will take precedence.');
+    }
   }
   
   return {
@@ -113,6 +128,9 @@ export function loadConfig(): AppConfig {
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
     storageType: env.STORAGE_TYPE,
     dropboxAccessToken: env.DROPBOX_ACCESS_TOKEN,
+    dropboxClientId: env.DROPBOX_CLIENT_ID,
+    dropboxRefreshToken: env.DROPBOX_REFRESH_TOKEN,
+    dropboxTokenStoragePath: env.DROPBOX_TOKEN_STORAGE_PATH,
     dropboxBasePath: env.DROPBOX_BASE_PATH
   };
 }
