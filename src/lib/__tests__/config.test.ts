@@ -47,7 +47,12 @@ function removeTestConfigFile() {
 beforeEach(() => {
   savedEnv = {};
   // Remove dotenv-loaded vars to avoid test pollution
-  const allEnvKeys = [...Object.keys(REQUIRED_ENV_WITH_ACCOUNTS), ...Object.keys(REQUIRED_ENV_WITHOUT_ACCOUNTS)];
+  const allEnvKeys = [
+    ...Object.keys(REQUIRED_ENV_WITH_ACCOUNTS), 
+    ...Object.keys(REQUIRED_ENV_WITHOUT_ACCOUNTS),
+    'STORAGE_TYPE', 'DROPBOX_ACCESS_TOKEN', 'DROPBOX_CLIENT_ID', 
+    'DROPBOX_REFRESH_TOKEN', 'DROPBOX_TOKEN_STORAGE_PATH', 'DROPBOX_BASE_PATH'
+  ];
   for (const key of allEnvKeys) {
     savedEnv[key] = process.env[key];
     delete process.env[key];
@@ -215,12 +220,86 @@ accounts:
       expect(config.dropboxBasePath).toBe('/custom/path');
     });
 
-    it('throws error when STORAGE_TYPE is dropbox but DROPBOX_ACCESS_TOKEN is missing', () => {
+    it('configures dropbox OAuth when CLIENT_ID and REFRESH_TOKEN are provided', () => {
+      setEnv({ 
+        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+        STORAGE_TYPE: 'dropbox',
+        DROPBOX_CLIENT_ID: 'test-client-id',
+        DROPBOX_REFRESH_TOKEN: 'test-refresh-token',
+        DROPBOX_TOKEN_STORAGE_PATH: '/custom/tokens.json'
+      });
+      const config = loadConfig();
+      expect(config.storageType).toBe('dropbox');
+      expect(config.dropboxClientId).toBe('test-client-id');
+      expect(config.dropboxRefreshToken).toBe('test-refresh-token');
+      expect(config.dropboxTokenStoragePath).toBe('/custom/tokens.json');
+    });
+
+    it('uses default token storage path when not specified', () => {
+      setEnv({ 
+        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+        STORAGE_TYPE: 'dropbox',
+        DROPBOX_CLIENT_ID: 'test-client-id',
+        DROPBOX_REFRESH_TOKEN: 'test-refresh-token'
+      });
+      const config = loadConfig();
+      expect(config.dropboxTokenStoragePath).toBe('.state/dropbox-tokens.json');
+    });
+
+    it('allows OAuth config without REFRESH_TOKEN for first-time setup', () => {
+      setEnv({ 
+        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+        STORAGE_TYPE: 'dropbox',
+        DROPBOX_CLIENT_ID: 'test-client-id'
+      });
+      const config = loadConfig();
+      expect(config.storageType).toBe('dropbox');
+      expect(config.dropboxClientId).toBe('test-client-id');
+      expect(config.dropboxRefreshToken).toBeUndefined();
+    });
+
+    it('warns when both access token and OAuth config are provided', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      setEnv({ 
+        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+        STORAGE_TYPE: 'dropbox',
+        DROPBOX_ACCESS_TOKEN: 'legacy-token',
+        DROPBOX_CLIENT_ID: 'test-client-id',
+        DROPBOX_REFRESH_TOKEN: 'test-refresh-token'
+      });
+      
+      const config = loadConfig();
+      expect(config.storageType).toBe('dropbox');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[warning] Both DROPBOX_ACCESS_TOKEN and OAuth configuration provided. OAuth configuration will take precedence.'
+      );
+      
+      consoleSpy.mockRestore();
+    });
+
+    it('throws error when STORAGE_TYPE is dropbox but no authentication is provided', () => {
       setEnv({ 
         ...REQUIRED_ENV_WITH_ACCOUNTS, 
         STORAGE_TYPE: 'dropbox'
       });
-      expect(() => loadConfig()).toThrow('DROPBOX_ACCESS_TOKEN is required when STORAGE_TYPE is "dropbox"');
+      expect(() => loadConfig()).toThrow(
+        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
+      );
+    });
+
+    it('accepts CLIENT_ID with token storage path but no refresh token', () => {
+      setEnv({ 
+        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+        STORAGE_TYPE: 'dropbox',
+        DROPBOX_CLIENT_ID: 'test-client-id',
+        DROPBOX_TOKEN_STORAGE_PATH: '/custom/tokens.json'
+      });
+      
+      expect(() => loadConfig()).not.toThrow();
+      const config = loadConfig();
+      expect(config.dropboxClientId).toBe('test-client-id');
+      expect(config.dropboxTokenStoragePath).toBe('/custom/tokens.json');
     });
   });
 

@@ -56,6 +56,9 @@ export type AppConfig = {
   requestTimeoutMs: number;
   storageType: 'local' | 'dropbox';
   dropboxAccessToken?: string;
+  dropboxClientId?: string;
+  dropboxRefreshToken?: string;
+  dropboxTokenStoragePath?: string;
   dropboxBasePath?: string;
 };
 

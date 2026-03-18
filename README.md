@@ -82,28 +82,61 @@ OBSIDIAN_VAULT_PATH=/absolute/path/to/ObsidianVault
 
 ### Dropbox保存
 
+Dropboxへの保存では2つの方法をサポートしています：
+
+#### 方法1: OAuth 2.0 + Refresh Token（推奨）
+
+2021年9月30日以降のDropbox Access Tokenは4時間で期限切れとなるため、長期運用にはOAuth 2.0 + Refresh Tokenの使用を推奨します。
+
+```env
+STORAGE_TYPE=dropbox
+DROPBOX_CLIENT_ID=your_dropbox_app_key_here
+DROPBOX_REFRESH_TOKEN=your_refresh_token_here  # 初回セットアップ後は自動設定
+DROPBOX_TOKEN_STORAGE_PATH=.state/dropbox-tokens.json
+DROPBOX_BASE_PATH=/  # オプション
+```
+
+**OAuth 2.0セットアップ手順**:
+
+1. [Dropbox App Console](https://www.dropbox.com/developers/apps) でアプリを作成
+   - API: "Scoped access" を選択
+   - Access: "Full Dropbox" を推奨
+   - App名を入力して作成
+
+2. アプリ設定:
+   - "Permissions" タブで以下の権限を有効化：
+     - `files.metadata.write`
+     - `files.metadata.read` 
+     - `files.content.write`
+     - `files.content.read`
+   - "Settings" タブで "App key" をコピーして `DROPBOX_CLIENT_ID` に設定
+   - "OAuth 2" セクションで Redirect URI に `http://localhost:8080/callback` を追加
+
+3. 初回認証（将来実装予定）:
+   ```bash
+   # 認証フローの実行（今後のアップデートで提供）
+   npm run auth:dropbox
+   ```
+   
+   現在は手動でRefresh Tokenを取得して `DROPBOX_REFRESH_TOKEN` に設定してください。
+
+#### 方法2: 静的Access Token（非推奨）
+
 ```env
 STORAGE_TYPE=dropbox
 DROPBOX_ACCESS_TOKEN=your_dropbox_access_token_here
-DROPBOX_BASE_PATH=/  # オプション、デフォルトは "/"
+DROPBOX_BASE_PATH=/
 ```
 
-**Dropbox Access Tokenの取得方法**:
+**注意**: この方法では4時間でトークンが期限切れとなり、手動でトークンを更新する必要があります。本番環境での使用は推奨されません。
 
-1. [Dropbox App Console](https://www.dropbox.com/developers/apps) にアクセス
-2. "Create app" をクリック
-3. API は "Scoped access" を選択
-4. App folder か Full Dropbox かを選択（Full Dropboxを推奨）
-5. App名を入力して作成
-6. "Permissions" タブで以下の権限を有効化：
-   - `files.metadata.write`
-   - `files.metadata.read` 
-   - `files.content.write`
-   - `files.content.read`
-7. "Settings" タブの "Generated access token" セクションで "Generate" をクリック
-8. 生成されたトークンを `DROPBOX_ACCESS_TOKEN` に設定
+**Access Tokenの取得方法**:
 
-**注意**: 
+1. 上記のアプリ作成手順を実行
+2. "Settings" タブの "Generated access token" セクションで "Generate" をクリック
+3. 生成されたトークンを `DROPBOX_ACCESS_TOKEN` に設定
+
+**共通の注意事項**: 
 - Dropbox保存時は、`OBSIDIAN_VAULT_PATH` の設定値は使用されません
 - `DROPBOX_BASE_PATH` でDropbox内の保存先ルートパスを指定できます（例: `/MyApp/`）
 - Dropbox保存時はObsidianでの直接閲覧はできません。必要に応じてDropboxからローカルに同期してください
