@@ -141,7 +141,7 @@ DROPBOX_BASE_PATH=/  # オプション
    
    以下のURLをブラウザで開きます。`YOUR_APP_KEY`の部分を**Step 1で取得したApp key**に置き換えてください：
    
-   ```
+   ```text
    https://www.dropbox.com/oauth2/authorize?client_id=YOUR_APP_KEY&response_type=code&token_access_type=offline&redirect_uri=http://localhost:8080/callback
    ```
    
@@ -202,9 +202,9 @@ DROPBOX_BASE_PATH=/  # オプション
    上記レスポンスから以下の値を`.env`ファイルに設定：
    
    ```env
-   DROPBOX_CLIENT_ID=YOUR_APP_KEY（Step 1で取得）
-   DROPBOX_CLIENT_SECRET=YOUR_APP_SECRET（Step 1で取得）
-   DROPBOX_REFRESH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（上記レスポンスのrefresh_token）
+   DROPBOX_CLIENT_ID=YOUR_APP_KEY # Step 1で取得
+   DROPBOX_CLIENT_SECRET=YOUR_APP_SECRET # Step 1で取得
+   DROPBOX_REFRESH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx # 上記レスポンスのrefresh_token
    ```
 
 ### 設定値一覧表
