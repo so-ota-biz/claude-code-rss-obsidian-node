@@ -154,11 +154,13 @@ export class TokenManager {
     }
 
     try {
-      // Use dropbox library's refresh token method
-      this.dropbox.setAccessToken(this.currentTokenInfo.accessToken);
-      this.dropbox.setRefreshToken(this.currentTokenInfo.refreshToken);
+      // Create a new Dropbox instance with refresh token for token refresh
+      const refreshDropbox = new Dropbox({
+        clientId: this.config.clientId,
+        refreshToken: this.currentTokenInfo.refreshToken,
+      });
       
-      const response = await this.dropbox.refreshAccessToken();
+      const response = await refreshDropbox.auth.refreshAccessToken();
       
       const newTokenInfo: TokenInfo = {
         accessToken: response.result.access_token,
