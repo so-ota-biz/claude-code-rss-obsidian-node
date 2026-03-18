@@ -231,6 +231,41 @@ export class TokenManager {
   }
 
   /**
+   * Force refresh access token regardless of expiration time
+   * Useful when a 401 error indicates the token has been revoked
+   */
+  async forceRefreshAccessToken(): Promise<string> {
+    // Load current token info if not available
+    if (!this.currentTokenInfo) {
+      this.currentTokenInfo = await this.loadTokenInfo();
+    }
+
+    // If still no token info and we have a refresh token in config, use it
+    if (!this.currentTokenInfo && this.config.refreshToken) {
+      this.currentTokenInfo = {
+        accessToken: '', // Will be refreshed immediately
+        refreshToken: this.config.refreshToken,
+        expiresAt: 0, // Expired, will trigger refresh
+      };
+    }
+
+    if (!this.currentTokenInfo) {
+      throw new Error('No token info available. Please run OAuth authentication first.');
+    }
+
+    // Force refresh by clearing any existing refresh promise and starting new one
+    this.refreshPromise = null;
+    this.refreshPromise = this.refreshAccessToken();
+    
+    try {
+      this.currentTokenInfo = await this.refreshPromise;
+      return this.currentTokenInfo.accessToken;
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+
+  /**
    * Check if authentication is properly set up
    */
   async isAuthenticated(): Promise<boolean> {

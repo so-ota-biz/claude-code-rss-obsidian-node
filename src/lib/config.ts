@@ -88,15 +88,22 @@ export function loadConfig(): AppConfig {
   // Dropbox設定のバリデーション
   if (env.STORAGE_TYPE === 'dropbox') {
     const hasAccessToken = !!env.DROPBOX_ACCESS_TOKEN;
-    const hasOAuthConfig = !!(env.DROPBOX_CLIENT_ID && (env.DROPBOX_REFRESH_TOKEN || env.DROPBOX_TOKEN_STORAGE_PATH));
+    const hasExplicitTokenStoragePath = !!process.env.DROPBOX_TOKEN_STORAGE_PATH;
+    const hasCompleteOAuthConfig = !!(env.DROPBOX_CLIENT_ID && (env.DROPBOX_REFRESH_TOKEN || hasExplicitTokenStoragePath));
+    const hasClientIdOnly = !!(env.DROPBOX_CLIENT_ID && !env.DROPBOX_REFRESH_TOKEN && !hasExplicitTokenStoragePath);
     
-    if (!hasAccessToken && !hasOAuthConfig) {
+    if (!hasAccessToken && !hasCompleteOAuthConfig && !hasClientIdOnly) {
       throw new Error(
         'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
       );
     }
     
-    if (hasAccessToken && hasOAuthConfig) {
+    // Warn about incomplete OAuth configuration
+    if (hasClientIdOnly) {
+      console.warn('[warning] DROPBOX_CLIENT_ID provided without DROPBOX_REFRESH_TOKEN. OAuth authentication must be completed manually or runtime errors will occur.');
+    }
+    
+    if (hasAccessToken && (hasCompleteOAuthConfig || hasClientIdOnly)) {
       console.warn('[warning] Both DROPBOX_ACCESS_TOKEN and OAuth configuration provided. OAuth configuration will take precedence.');
     }
   }
