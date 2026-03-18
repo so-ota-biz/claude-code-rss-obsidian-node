@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DropboxStorage } from '../storage-dropbox.js';
+import type { TokenManager } from '../token-manager.js';
 
 // Mock Dropbox
 const mockDropbox = {
@@ -7,20 +8,31 @@ const mockDropbox = {
   filesDownload: vi.fn(),
   filesCreateFolderV2: vi.fn(),
   filesGetMetadata: vi.fn(),
+  setAccessToken: vi.fn(),
 };
 
-vi.mock('dropbox', () => {
-  return {
-    Dropbox: vi.fn().mockImplementation(() => mockDropbox)
-  };
-});
+vi.mock('dropbox', () => ({
+  Dropbox: function MockDropbox() {
+    return mockDropbox;
+  }
+}));
+
+// Mock TokenManager
+const mockTokenManager = {
+  getValidAccessToken: vi.fn(),
+  forceRefreshAccessToken: vi.fn(),
+} as unknown as TokenManager;
 
 describe('DropboxStorage', () => {
   let storage: DropboxStorage;
+  let storageWithTokenManager: DropboxStorage;
 
   beforeEach(() => {
     vi.clearAllMocks();
     storage = new DropboxStorage('test-token', '/test');
+    
+    (mockTokenManager.getValidAccessToken as any).mockResolvedValue('fresh-token');
+    storageWithTokenManager = new DropboxStorage(mockTokenManager, '/test');
   });
 
   describe('path normalization', () => {
@@ -157,6 +169,129 @@ describe('DropboxStorage', () => {
       const exists = await storage.exists('missing.txt');
 
       expect(exists).toBe(false);
+    });
+  });
+
+  describe('TokenManager integration', () => {
+    it('uses TokenManager for authentication', async () => {
+      mockDropbox.filesUpload.mockResolvedValueOnce({ result: {} });
+
+      await storageWithTokenManager.writeFile('test.txt', 'content');
+
+      expect(mockTokenManager.getValidAccessToken).toHaveBeenCalled();
+      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('fresh-token');
+      expect(mockDropbox.filesUpload).toHaveBeenCalled();
+    });
+
+    it('retries on 401 error with token refresh', async () => {
+      const unauthorizedError = { status: 401 };
+      mockDropbox.filesUpload
+        .mockRejectedValueOnce(unauthorizedError)
+        .mockResolvedValueOnce({ result: {} });
+
+      (mockTokenManager.getValidAccessToken as any).mockResolvedValueOnce('expired-token');
+      (mockTokenManager.forceRefreshAccessToken as any).mockResolvedValueOnce('refreshed-token');
+
+      await storageWithTokenManager.writeFile('test.txt', 'content');
+
+      expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockTokenManager.forceRefreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('expired-token');
+      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('refreshed-token');
+      expect(mockDropbox.filesUpload).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails after maximum retries on persistent 401 errors', async () => {
+      const unauthorizedError = { status: 401, message: 'Unauthorized' };
+      mockDropbox.filesUpload.mockRejectedValue(unauthorizedError);
+      (mockTokenManager.forceRefreshAccessToken as any).mockResolvedValue('refreshed-token');
+
+      await expect(storageWithTokenManager.writeFile('test.txt', 'content'))
+        .rejects.toThrow('Failed to write file to Dropbox: Unauthorized');
+
+      expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1); // Initial call
+      expect(mockTokenManager.forceRefreshAccessToken).toHaveBeenCalledTimes(2); // 2 retries
+      expect(mockDropbox.filesUpload).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not retry on non-401 errors', async () => {
+      const otherError = { status: 500, message: 'Server Error' };
+      mockDropbox.filesUpload.mockRejectedValueOnce(otherError);
+
+      await expect(storageWithTokenManager.writeFile('test.txt', 'content'))
+        .rejects.toThrow('Failed to write file to Dropbox: Server Error');
+
+      expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockDropbox.filesUpload).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails when token refresh fails', async () => {
+      const unauthorizedError = { status: 401 };
+      mockDropbox.filesUpload.mockRejectedValue(unauthorizedError);
+      (mockTokenManager.getValidAccessToken as any).mockResolvedValueOnce('expired-token');
+      (mockTokenManager.forceRefreshAccessToken as any).mockRejectedValueOnce(new Error('Refresh failed'));
+
+      await expect(storageWithTokenManager.writeFile('test.txt', 'content'))
+        .rejects.toThrow('Failed to write file to Dropbox: Token refresh failed - Refresh failed');
+
+      expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockTokenManager.forceRefreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockDropbox.filesUpload).toHaveBeenCalledTimes(1);
+    });
+
+    describe('with different API methods', () => {
+      it('handles token refresh for readFile', async () => {
+        const unauthorizedError = { status: 401 };
+        const mockBuffer = Buffer.from('file content', 'utf8');
+        
+        mockDropbox.filesDownload
+          .mockRejectedValueOnce(unauthorizedError)
+          .mockResolvedValueOnce({ result: { fileBinary: mockBuffer } });
+
+        (mockTokenManager.getValidAccessToken as any).mockResolvedValueOnce('expired-token');
+        (mockTokenManager.forceRefreshAccessToken as any).mockResolvedValueOnce('refreshed-token');
+
+        const content = await storageWithTokenManager.readFile('test.txt');
+
+        expect(content).toBe('file content');
+        expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1);
+        expect(mockTokenManager.forceRefreshAccessToken).toHaveBeenCalledTimes(1);
+      });
+
+      it('handles token refresh for exists', async () => {
+        const unauthorizedError = { status: 401 };
+        
+        mockDropbox.filesGetMetadata
+          .mockRejectedValueOnce(unauthorizedError)
+          .mockResolvedValueOnce({ result: {} });
+
+        (mockTokenManager.getValidAccessToken as any).mockResolvedValueOnce('expired-token');
+        (mockTokenManager.forceRefreshAccessToken as any).mockResolvedValueOnce('refreshed-token');
+
+        const exists = await storageWithTokenManager.exists('test.txt');
+
+        expect(exists).toBe(true);
+        expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1);
+        expect(mockTokenManager.forceRefreshAccessToken).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+
+  describe('legacy mode compatibility', () => {
+    it('works with static access token', async () => {
+      mockDropbox.filesUpload.mockResolvedValueOnce({ result: {} });
+
+      await storage.writeFile('test.txt', 'content');
+
+      expect(mockDropbox.filesUpload).toHaveBeenCalledWith({
+        path: '/test/test.txt',
+        contents: expect.any(Buffer),
+        mode: { '.tag': 'overwrite' },
+      });
+      
+      // Should not call TokenManager methods
+      expect(mockTokenManager.getValidAccessToken).not.toHaveBeenCalled();
+      expect(mockDropbox.setAccessToken).not.toHaveBeenCalled();
     });
   });
 });

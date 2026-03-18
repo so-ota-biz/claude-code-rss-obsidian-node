@@ -31,6 +31,9 @@ const schema = z.object({
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   STORAGE_TYPE: z.enum(['local', 'dropbox']).default('local'),
   DROPBOX_ACCESS_TOKEN: z.string().optional(),
+  DROPBOX_CLIENT_ID: z.string().optional(),
+  DROPBOX_REFRESH_TOKEN: z.string().optional(),
+  DROPBOX_TOKEN_STORAGE_PATH: z.string().default('.state/dropbox-tokens.json'),
   DROPBOX_BASE_PATH: z.string().default('/')
 });
 
@@ -125,6 +128,9 @@ export function loadConfig(): AppConfig {
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
     storageType: env.STORAGE_TYPE,
     dropboxAccessToken: env.DROPBOX_ACCESS_TOKEN,
+    dropboxClientId: env.DROPBOX_CLIENT_ID,
+    dropboxRefreshToken: env.DROPBOX_REFRESH_TOKEN,
+    dropboxTokenStoragePath: env.DROPBOX_TOKEN_STORAGE_PATH,
     dropboxBasePath: env.DROPBOX_BASE_PATH
   };
 }
