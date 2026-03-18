@@ -112,13 +112,46 @@ DROPBOX_BASE_PATH=/  # オプション
    - "Settings" タブで "App key" をコピーして `DROPBOX_CLIENT_ID` に設定
    - "OAuth 2" セクションで Redirect URI に `http://localhost:8080/callback` を追加
 
-3. 初回認証（将来実装予定）:
-   ```bash
-   # 認証フローの実行（今後のアップデートで提供）
-   npm run auth:dropbox
+3. Refresh Tokenの取得:
+   
+   現在のところ手動でRefresh Tokenを取得する必要があります。以下の手順で実行してください：
+
+   **Step 1: 認証URLを生成**
+   
+   以下のURLにアクセスして認証を行います（`YOUR_APP_KEY`を実際のApp Keyに置き換えてください）：
+   
+   ```
+   https://www.dropbox.com/oauth2/authorize?client_id=YOUR_APP_KEY&response_type=code&token_access_type=offline&redirect_uri=http://localhost:8080/callback
    ```
    
-   現在は手動でRefresh Tokenを取得して `DROPBOX_REFRESH_TOKEN` に設定してください。
+   **Step 2: 認証コードを取得**
+   
+   - 上記URLにアクセスして「許可する」をクリック
+   - `http://localhost:8080/callback?code=XXXXXXXXXX` のようなURLにリダイレクトされます
+   - URLの `code=` 以降の文字列（認証コード）をコピーしてください
+   
+   **Step 3: Refresh Tokenを取得**
+   
+   以下のcurlコマンドで認証コードをRefresh Tokenに交換します：
+   
+   ```bash
+   curl -X POST https://api.dropboxapi.com/oauth2/token \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "code=認証コード" \
+     -d "grant_type=authorization_code" \
+     -d "client_id=YOUR_APP_KEY" \
+     -d "redirect_uri=http://localhost:8080/callback"
+   ```
+   
+   **Step 4: 設定ファイルに追加**
+   
+   レスポンスの `refresh_token` フィールドの値を `.env` ファイルの `DROPBOX_REFRESH_TOKEN` に設定してください：
+   
+   ```env
+   DROPBOX_REFRESH_TOKEN=返された_refresh_token_の値
+   ```
+   
+   **注意**: Refresh Tokenは長期間有効ですが、安全に保管してください。このトークンがあればDropboxのファイルにアクセスできます。
 
 #### 方法2: 静的Access Token（非推奨）
 
@@ -140,6 +173,7 @@ DROPBOX_BASE_PATH=/
 - Dropbox保存時は、`OBSIDIAN_VAULT_PATH` の設定値は使用されません
 - `DROPBOX_BASE_PATH` でDropbox内の保存先ルートパスを指定できます（例: `/MyApp/`）
 - Dropbox保存時はObsidianでの直接閲覧はできません。必要に応じてDropboxからローカルに同期してください
+- OAuth 2.0 + Refresh Token方式では、アクセストークンの自動更新に対応しており、4時間の期限切れを気にせず長期運用が可能です
 
 ### 画像生成 CLI を使う場合
 
