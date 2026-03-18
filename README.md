@@ -91,6 +91,7 @@ Dropboxへの保存では2つの方法をサポートしています：
 ```env
 STORAGE_TYPE=dropbox
 DROPBOX_CLIENT_ID=your_dropbox_app_key_here
+DROPBOX_CLIENT_SECRET=your_dropbox_app_secret_here
 DROPBOX_REFRESH_TOKEN=your_refresh_token_here  # 初回セットアップ後は自動設定
 DROPBOX_TOKEN_STORAGE_PATH=.state/dropbox-tokens.json
 DROPBOX_BASE_PATH=/  # オプション
@@ -109,7 +110,9 @@ DROPBOX_BASE_PATH=/  # オプション
      - `files.metadata.read` 
      - `files.content.write`
      - `files.content.read`
-   - "Settings" タブで "App key" をコピーして `DROPBOX_CLIENT_ID` に設定
+   - "Settings" タブで以下をコピーして設定：
+     - "App key" を `DROPBOX_CLIENT_ID` に設定
+     - "App secret" を `DROPBOX_CLIENT_SECRET` に設定（"Show" ボタンをクリックして表示）
    - "OAuth 2" セクションで Redirect URI に `http://localhost:8080/callback` を追加
 
 3. Refresh Tokenの取得:

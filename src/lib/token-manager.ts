@@ -155,8 +155,10 @@ export class TokenManager {
 
     try {
       // Create a new Dropbox instance with refresh token for token refresh
+      // Note: clientSecret is required for refresh token flow in Dropbox SDK v10
       const refreshDropbox = new Dropbox({
         clientId: this.config.clientId,
+        clientSecret: process.env.DROPBOX_CLIENT_SECRET,
         refreshToken: this.currentTokenInfo.refreshToken,
       });
       
@@ -173,7 +175,12 @@ export class TokenManager {
       
       return newTokenInfo;
     } catch (error) {
-      throw new Error(`Failed to refresh access token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Provide more detailed error information for debugging
+      if (error && typeof error === 'object' && 'response' in error) {
+        const response = (error as any).response;
+        throw new Error(`Failed to refresh access token: HTTP ${response?.status || 'unknown'} - ${JSON.stringify(response?.body || error)}`);
+      }
+      throw new Error(`Failed to refresh access token: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     }
   }
 
