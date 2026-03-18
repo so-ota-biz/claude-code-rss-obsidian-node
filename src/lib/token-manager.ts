@@ -162,31 +162,16 @@ export class TokenManager {
         refreshToken: this.currentTokenInfo.refreshToken,
       });
       
-      // Debug: Check if required parameters are available
-      console.log('TokenManager debug info:');
-      console.log('- clientId:', this.config.clientId);
-      console.log('- clientSecret available:', !!process.env.DROPBOX_CLIENT_SECRET);
-      console.log('- refreshToken available:', !!this.currentTokenInfo.refreshToken);
-      console.log('- refreshToken length:', this.currentTokenInfo.refreshToken?.length);
-      
       // Use checkAndRefreshAccessToken which handles the full refresh flow
-      const tokenResponse = await refreshDropbox.auth.checkAndRefreshAccessToken();
-      
-      // Debug: Log response structure
-      console.log('Refresh token response:', JSON.stringify(tokenResponse, null, 2));
+      await refreshDropbox.auth.checkAndRefreshAccessToken();
       
       // Get the updated tokens from the auth object
       const newAccessToken = refreshDropbox.auth.getAccessToken();
       const newRefreshToken = refreshDropbox.auth.getRefreshToken();
       const expiresAt = refreshDropbox.auth.getAccessTokenExpiresAt();
       
-      console.log('After refresh:');
-      console.log('- newAccessToken available:', !!newAccessToken);
-      console.log('- newRefreshToken available:', !!newRefreshToken);
-      console.log('- expiresAt:', expiresAt);
-      
       if (!newAccessToken) {
-        throw new Error(`No access token received after refresh. Response: ${JSON.stringify(tokenResponse)}`);
+        throw new Error(`No access token received after refresh`);
       }
       
       const newTokenInfo: TokenInfo = {
@@ -201,7 +186,6 @@ export class TokenManager {
       return newTokenInfo;
     } catch (error) {
       // Provide more detailed error information for debugging
-      console.error('Full error object:', error);
       if (error && typeof error === 'object' && 'response' in error) {
         const response = (error as any).response;
         throw new Error(`Failed to refresh access token: HTTP ${response?.status || 'unknown'} - ${JSON.stringify(response?.body || error)}`);
