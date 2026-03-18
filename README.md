@@ -97,45 +97,84 @@ DROPBOX_TOKEN_STORAGE_PATH=.state/dropbox-tokens.json
 DROPBOX_BASE_PATH=/  # オプション
 ```
 
-**OAuth 2.0セットアップ手順**:
+**OAuth 2.0セットアップ手順（詳細版）**:
 
-1. [Dropbox App Console](https://www.dropbox.com/developers/apps) でアプリを作成
-   - API: "Scoped access" を選択
-   - Access: "Full Dropbox" を推奨
-   - App名を入力して作成
+### Step 1: Dropboxアプリの作成と設定
 
-2. アプリ設定:
-   - "Permissions" タブで以下の権限を有効化：
-     - `files.metadata.write`
-     - `files.metadata.read` 
-     - `files.content.write`
-     - `files.content.read`
-   - "Settings" タブで以下をコピーして設定：
-     - "App key" を `DROPBOX_CLIENT_ID` に設定
-     - "App secret" を `DROPBOX_CLIENT_SECRET` に設定（"Show" ボタンをクリックして表示）
-   - "OAuth 2" セクションで Redirect URI に `http://localhost:8080/callback` を追加
+1. **アプリを作成**
+   - [Dropbox App Console](https://www.dropbox.com/developers/apps) にアクセス
+   - 「Create app」ボタンをクリック
+   - 以下の設定を選択：
+     - **Choose an API**: 「Scoped access」を選択
+     - **Choose the type of access you need**: 「Full Dropbox」を推奨
+     - **Name your app**: アプリ名を入力（例: "RSS Obsidian Bot"）
+   - 「Create app」をクリック
 
-3. Refresh Tokenの取得:
+2. **権限設定**
+   - アプリ作成後、「Permissions」タブをクリック
+   - 以下の権限にチェックを入れて有効化：
+     - ✅ `files.metadata.write` (ファイルメタデータの書き込み)
+     - ✅ `files.metadata.read` (ファイルメタデータの読み取り)
+     - ✅ `files.content.write` (ファイル内容の書き込み)
+     - ✅ `files.content.read` (ファイル内容の読み取り)
+   - 「Submit」ボタンをクリックして権限を保存
+
+3. **認証情報の取得**
+   - 「Settings」タブに移動
+   - 以下の情報をコピーして保管：
+     - **App key**: そのままコピー → `.env`の`DROPBOX_CLIENT_ID`に設定
+     - **App secret**: 「Show」ボタンをクリックして表示 → `.env`の`DROPBOX_CLIENT_SECRET`に設定
+
+4. **OAuth設定**
+   - 同じく「Settings」タブで「OAuth 2」セクションを探す
+   - 「Redirect URIs」に以下を追加：
+     ```
+     http://localhost:8080/callback
+     ```
+   - 「Add」ボタンをクリックして保存
+
+### Step 2: Refresh Tokenの手動取得
+
+現在は手動でRefresh Tokenを取得する必要があります。以下の手順を **正確に** 実行してください：
+
+1. **認証URLの作成とアクセス**
    
-   現在のところ手動でRefresh Tokenを取得する必要があります。以下の手順で実行してください：
-
-   **Step 1: 認証URLを生成**
-   
-   以下のURLにアクセスして認証を行います（`YOUR_APP_KEY`を実際のApp Keyに置き換えてください）：
+   以下のURLをブラウザで開きます。`YOUR_APP_KEY`の部分を**Step 1で取得したApp key**に置き換えてください：
    
    ```
    https://www.dropbox.com/oauth2/authorize?client_id=YOUR_APP_KEY&response_type=code&token_access_type=offline&redirect_uri=http://localhost:8080/callback
    ```
    
-   **Step 2: 認証コードを取得**
+   **例**: App keyが`abc123def456`の場合
+   ```
+   https://www.dropbox.com/oauth2/authorize?client_id=abc123def456&response_type=code&token_access_type=offline&redirect_uri=http://localhost:8080/callback
+   ```
+
+2. **認証の実行**
    
-   - 上記URLにアクセスして「許可する」をクリック
-   - `http://localhost:8080/callback?code=XXXXXXXXXX` のようなURLにリダイレクトされます
-   - URLの `code=` 以降の文字列（認証コード）をコピーしてください
+   - Dropboxのログイン画面が表示される場合はログインする
+   - アプリの権限許可画面で「**許可する**」をクリック
+   - エラーページ（接続できませんでした）が表示されるが、**これは正常です**
+   - ブラウザのアドレスバーのURLを確認する
    
-   **Step 3: Refresh Tokenを取得**
+   **期待されるURL形式**:
+   ```
+   http://localhost:8080/callback?code=VERY_LONG_CODE_STRING&state=...
+   ```
+
+3. **認証コードの抽出**
    
-   以下のcurlコマンドで認証コードをRefresh Tokenに交換します：
+   上記URLの`code=`と`&`（または`&state=`）の間にある長い文字列をコピーします。
+   
+   **例**: 
+   ```
+   http://localhost:8080/callback?code=abcdef123456789&state=xyz
+   ```
+   この場合、`abcdef123456789`が認証コードです。
+
+4. **Refresh Tokenの取得**
+   
+   以下のcurlコマンドを実行します。`認証コード`と`YOUR_APP_KEY`、`YOUR_APP_SECRET`を実際の値に置き換えてください：
    
    ```bash
    curl -X POST https://api.dropboxapi.com/oauth2/token \
@@ -143,18 +182,44 @@ DROPBOX_BASE_PATH=/  # オプション
      -d "code=認証コード" \
      -d "grant_type=authorization_code" \
      -d "client_id=YOUR_APP_KEY" \
+     -d "client_secret=YOUR_APP_SECRET" \
      -d "redirect_uri=http://localhost:8080/callback"
    ```
    
-   **Step 4: 設定ファイルに追加**
+   **成功時のレスポンス例**:
+   ```json
+   {
+     "access_token": "sl.xxxxxxxxx",
+     "token_type": "bearer",
+     "expires_in": 14400,
+     "refresh_token": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "scope": "account_info.read files.content.read files.content.write files.metadata.read files.metadata.write"
+   }
+   ```
+
+5. **設定ファイルに値を設定**
    
-   レスポンスの `refresh_token` フィールドの値を `.env` ファイルの `DROPBOX_REFRESH_TOKEN` に設定してください：
+   上記レスポンスから以下の値を`.env`ファイルに設定：
    
    ```env
-   DROPBOX_REFRESH_TOKEN=返された_refresh_token_の値
+   DROPBOX_CLIENT_ID=YOUR_APP_KEY（Step 1で取得）
+   DROPBOX_CLIENT_SECRET=YOUR_APP_SECRET（Step 1で取得）
+   DROPBOX_REFRESH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx（上記レスポンスのrefresh_token）
    ```
-   
-   **注意**: Refresh Tokenは長期間有効ですが、安全に保管してください。このトークンがあればDropboxのファイルにアクセスできます。
+
+### 設定値一覧表
+
+| 環境変数名 | 取得場所 | 説明 |
+|------------|----------|------|
+| `DROPBOX_CLIENT_ID` | Dropbox App Console → Settings → App key | アプリケーション識別子 |
+| `DROPBOX_CLIENT_SECRET` | Dropbox App Console → Settings → App secret（Showボタンで表示） | アプリケーション秘密鍵 |
+| `DROPBOX_REFRESH_TOKEN` | curlコマンドの実行結果 → `refresh_token`フィールド | 長期アクセス用トークン |
+
+**⚠️ 重要な注意事項**:
+- `DROPBOX_CLIENT_SECRET`と`DROPBOX_REFRESH_TOKEN`は機密情報です。絶対に公開しないでください
+- 認証コードは一度しか使用できません。失敗した場合は Step 2 からやり直してください
+- Refresh Tokenは有効期限がありませんが、Dropbox側で無効化される場合があります
+- 初回設定後はアクセストークンの自動更新が行われるため、手動操作は不要です
 
 #### 方法2: 静的Access Token（非推奨）
 

@@ -164,11 +164,20 @@ export class TokenManager {
       
       const response = await refreshDropbox.auth.refreshAccessToken();
       
+      // Debug: Log response structure
+      console.log('Refresh token response:', JSON.stringify(response, null, 2));
+      
+      // Handle different response formats
+      const tokenData = response?.result || response;
+      if (!tokenData || !tokenData.access_token) {
+        throw new Error(`Invalid token response format: ${JSON.stringify(response)}`);
+      }
+      
       const newTokenInfo: TokenInfo = {
-        accessToken: response.result.access_token,
+        accessToken: tokenData.access_token,
         refreshToken: this.currentTokenInfo.refreshToken, // Refresh token typically doesn't change
-        expiresAt: Date.now() + (response.result.expires_in * 1000),
-        tokenType: response.result.token_type,
+        expiresAt: Date.now() + (tokenData.expires_in * 1000),
+        tokenType: tokenData.token_type || 'Bearer',
       };
 
       await this.saveTokenInfo(newTokenInfo);
