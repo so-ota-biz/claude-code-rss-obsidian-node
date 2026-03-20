@@ -57,6 +57,7 @@ export type AppConfig = {
   storageType: 'local' | 'dropbox';
   dropboxAccessToken?: string;
   dropboxClientId?: string;
+  dropboxClientSecret?: string;
   dropboxRefreshToken?: string;
   dropboxTokenStoragePath?: string;
   dropboxBasePath?: string;

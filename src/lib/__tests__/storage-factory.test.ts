@@ -69,15 +69,17 @@ describe('createStorageProvider', () => {
         ...baseConfig,
         storageType: 'dropbox' as const,
         dropboxClientId: 'test-client-id',
+        dropboxClientSecret: 'test-client-secret',
         dropboxRefreshToken: 'test-refresh-token',
         dropboxTokenStoragePath: '/test/tokens.json',
         dropboxBasePath: '/test/path'
       };
-      
+
       createStorageProvider(config);
-      
+
       expect(TokenManager).toHaveBeenCalledWith({
         clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
         tokenStoragePath: '/test/tokens.json',
         refreshToken: 'test-refresh-token'
       });
@@ -93,13 +95,15 @@ describe('createStorageProvider', () => {
         ...baseConfig,
         storageType: 'dropbox' as const,
         dropboxClientId: 'test-client-id',
+        dropboxClientSecret: 'test-client-secret',
         dropboxRefreshToken: 'test-refresh-token'
       };
-      
+
       createStorageProvider(config);
-      
+
       expect(TokenManager).toHaveBeenCalledWith({
         clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
         tokenStoragePath: expect.stringContaining('dropbox-tokens.json'),
         refreshToken: 'test-refresh-token'
       });
@@ -110,13 +114,15 @@ describe('createStorageProvider', () => {
         ...baseConfig,
         storageType: 'dropbox' as const,
         dropboxClientId: 'test-client-id',
+        dropboxClientSecret: 'test-client-secret',
         dropboxTokenStoragePath: '/test/tokens.json'
       };
-      
+
       createStorageProvider(config);
-      
+
       expect(TokenManager).toHaveBeenCalledWith({
         clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
         tokenStoragePath: '/test/tokens.json',
         refreshToken: undefined
       });
@@ -149,7 +155,7 @@ describe('createStorageProvider', () => {
       };
       
       expect(() => createStorageProvider(config)).toThrow(
-        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required'
+        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required'
       );
     });
   });
@@ -160,17 +166,19 @@ describe('createStorageProvider', () => {
         ...baseConfig,
         storageType: 'dropbox' as const,
         dropboxClientId: 'test-client-id',
+        dropboxClientSecret: 'test-client-secret',
         dropboxRefreshToken: 'test-refresh-token',
         dropboxAccessToken: 'legacy-token', // Should be ignored
         dropboxTokenStoragePath: '/test/tokens.json',
         dropboxBasePath: '/test/path'
       };
-      
+
       createStorageProvider(config);
-      
+
       // Should create TokenManager (OAuth mode)
       expect(TokenManager).toHaveBeenCalledWith({
         clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
         tokenStoragePath: '/test/tokens.json',
         refreshToken: 'test-refresh-token'
       });

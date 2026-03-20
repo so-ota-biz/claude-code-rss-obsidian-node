@@ -23,7 +23,9 @@ export class DropboxStorage implements StorageProvider {
   private async ensureValidAccessToken(): Promise<void> {
     if (this.tokenManager) {
       const accessToken = await this.tokenManager.getValidAccessToken();
-      this.dropbox.setAccessToken(accessToken);
+      // Create a new Dropbox instance with the fresh access token
+      // This approach works with Dropbox SDK v10
+      this.dropbox = new Dropbox({ accessToken });
     }
   }
 
@@ -112,7 +114,9 @@ export class DropboxStorage implements StorageProvider {
           // Force refresh token on 401 error (token may be revoked) and retry
           try {
             const newToken = await this.tokenManager.forceRefreshAccessToken();
-            this.dropbox.setAccessToken(newToken);
+            // Create a new Dropbox instance with the fresh access token
+            // This approach works with Dropbox SDK v10
+            this.dropbox = new Dropbox({ accessToken: newToken });
             continue;
           } catch (refreshError) {
             throw new Error(`Failed to ${operationName}: Token refresh failed - ${refreshError instanceof Error ? refreshError.message : 'Unknown error'}`);

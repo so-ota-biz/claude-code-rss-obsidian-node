@@ -179,7 +179,6 @@ describe('DropboxStorage', () => {
       await storageWithTokenManager.writeFile('test.txt', 'content');
 
       expect(mockTokenManager.getValidAccessToken).toHaveBeenCalled();
-      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('fresh-token');
       expect(mockDropbox.filesUpload).toHaveBeenCalled();
     });
 
@@ -196,8 +195,6 @@ describe('DropboxStorage', () => {
 
       expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1);
       expect(mockTokenManager.forceRefreshAccessToken).toHaveBeenCalledTimes(1);
-      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('expired-token');
-      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('refreshed-token');
       expect(mockDropbox.filesUpload).toHaveBeenCalledTimes(2);
     });
 
