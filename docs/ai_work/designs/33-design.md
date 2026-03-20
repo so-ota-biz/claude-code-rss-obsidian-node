@@ -36,6 +36,13 @@ https://github.com/so-ota-biz/ai-agent-orchestration-settings/issues/33
 - 環境変数の管理方法（.env ファイルのセキュアな配置）
 - cron ジョブによるバッチ処理の自動実行設定
 
+### 機密情報管理方針（DROPBOX_CLIENT_SECRET 等）
+- **保管**: 平文でのリポジトリコミット禁止。本番環境では `.env` より Vault / AWS Secrets Manager / GitHub Actions Secrets 等のシークレットストアを優先
+- **注入**: CI/CD パイプラインのシークレット注入（GitHub Actions `secrets.*` 等）または Docker Compose の `env_file` + VPS ローカル `.env`（600 パーミッション）に限定し、コンテナ外への漏洩経路を最小化
+- **最小権限**: Dropbox App は必要なスコープのみ付与。`DROPBOX_CLIENT_SECRET` は TokenManager 内にのみ保持し、ログ・エラーメッセージへの値出力を禁止
+- **ローテーション**: Dropbox App Key/Secret は漏洩検知時または定期（年 1 回以上）に再発行し、新トークンで `DROPBOX_REFRESH_TOKEN` を再取得する手順を運用手順書に記載
+- **バックアップ**: 状態ファイル・トークンファイルをバックアップに含める場合は暗号化（例: `gpg --symmetric`）し、復号手順を運用手順書に明記
+
 ### 移行方式
 - Blue-Green 方式での段階的移行
   1. VPS 環境構築・テスト
