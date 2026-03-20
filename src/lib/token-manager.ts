@@ -12,6 +12,7 @@ export interface TokenInfo {
 
 export interface TokenManagerConfig {
   clientId: string;
+  clientSecret: string;
   tokenStoragePath: string;
   refreshToken?: string; // For initial setup
 }
@@ -154,24 +155,43 @@ export class TokenManager {
     }
 
     try {
-      // Use dropbox library's refresh token method
-      this.dropbox.setAccessToken(this.currentTokenInfo.accessToken);
-      this.dropbox.setRefreshToken(this.currentTokenInfo.refreshToken);
+      // Create a new Dropbox instance with refresh token for token refresh
+      // Note: clientSecret is required for refresh token flow in Dropbox SDK v10
+      const refreshDropbox = new Dropbox({
+        clientId: this.config.clientId,
+        clientSecret: this.config.clientSecret,
+        refreshToken: this.currentTokenInfo.refreshToken,
+      });
       
-      const response = await this.dropbox.refreshAccessToken();
+      // Use checkAndRefreshAccessToken which handles the full refresh flow
+      await refreshDropbox.auth.checkAndRefreshAccessToken();
+      
+      // Get the updated tokens from the auth object
+      const newAccessToken = refreshDropbox.auth.getAccessToken();
+      const newRefreshToken = refreshDropbox.auth.getRefreshToken();
+      const expiresAt = refreshDropbox.auth.getAccessTokenExpiresAt();
+      
+      if (!newAccessToken) {
+        throw new Error(`No access token received after refresh`);
+      }
       
       const newTokenInfo: TokenInfo = {
-        accessToken: response.result.access_token,
-        refreshToken: this.currentTokenInfo.refreshToken, // Refresh token typically doesn't change
-        expiresAt: Date.now() + (response.result.expires_in * 1000),
-        tokenType: response.result.token_type,
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken || this.currentTokenInfo.refreshToken, // Keep original if not returned
+        expiresAt: expiresAt ? new Date(expiresAt).getTime() : Date.now() + (4 * 60 * 60 * 1000), // Default 4 hours
+        tokenType: 'Bearer',
       };
 
       await this.saveTokenInfo(newTokenInfo);
       
       return newTokenInfo;
     } catch (error) {
-      throw new Error(`Failed to refresh access token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Provide more detailed error information for debugging
+      if (error && typeof error === 'object' && 'response' in error) {
+        const response = (error as any).response;
+        throw new Error(`Failed to refresh access token: HTTP ${response?.status || 'unknown'} - ${JSON.stringify(response?.body || error)}`);
+      }
+      throw new Error(`Failed to refresh access token: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     }
   }
 
