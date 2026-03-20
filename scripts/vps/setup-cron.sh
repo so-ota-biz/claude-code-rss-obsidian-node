@@ -33,7 +33,7 @@ cat >> /tmp/crontab.current << EOF
 0 17 * * 0 cd $APP_DIR && npm run rsshub:down && sleep 10 && npm run rsshub:up
 
 # システム更新（毎週日曜 3:00 JST = 18:00 UTC）
-0 18 * * 0 DEBIAN_FRONTEND=noninteractive sudo apt update && sudo apt upgrade -y >> $LOG_DIR/system-update.log 2>&1
+0 18 * * 0 sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >> $LOG_DIR/system-update.log 2>&1
 
 EOF
 

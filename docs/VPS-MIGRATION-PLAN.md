@@ -387,7 +387,7 @@ sudo systemctl restart ssh
 ### 定期的なセキュリティ更新
 ```bash
 # cron に追加（週1回、日曜深夜）
-0 3 * * 0 apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y >> /home/deploy/logs/system-update.log 2>&1
+0 3 * * 0 sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >> /home/deploy/logs/system-update.log 2>&1
 ```
 
 ## 移行時の注意点
