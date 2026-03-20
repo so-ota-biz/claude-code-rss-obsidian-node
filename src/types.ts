@@ -61,6 +61,7 @@ export type AppConfig = {
   dropboxRefreshToken?: string;
   dropboxTokenStoragePath?: string;
   dropboxBasePath?: string;
+  dropboxOAuthComplete?: boolean;
 };
 
 export type AccountConfig = {

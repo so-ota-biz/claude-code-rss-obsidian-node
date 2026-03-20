@@ -291,7 +291,7 @@ accounts:
         STORAGE_TYPE: 'dropbox'
       });
       expect(() => loadConfig()).toThrow(
-        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
+        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + (DROPBOX_REFRESH_TOKEN or DROPBOX_TOKEN_STORAGE_PATH) (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
       );
     });
 

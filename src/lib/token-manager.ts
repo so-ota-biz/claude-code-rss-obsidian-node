@@ -163,7 +163,9 @@ export class TokenManager {
         refreshToken: this.currentTokenInfo.refreshToken,
       });
 
-      // Use checkAndRefreshAccessToken which handles the full refresh flow
+      // checkAndRefreshAccessToken() is a public method on DropboxAuth
+      // (see https://dropbox.github.io/dropbox-sdk-js/DropboxAuth.html).
+      // It proactively refreshes the access token using the configured refresh token.
       await refreshDropbox.auth.checkAndRefreshAccessToken();
 
       // Get the updated tokens from the auth object

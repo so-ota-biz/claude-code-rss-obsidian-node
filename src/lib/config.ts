@@ -94,7 +94,7 @@ export function loadConfig(): AppConfig {
 
     if (!hasAccessToken && !hasCompleteOAuthConfig) {
       throw new Error(
-        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
+        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + (DROPBOX_REFRESH_TOKEN or DROPBOX_TOKEN_STORAGE_PATH) (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
       );
     }
     
@@ -133,6 +133,9 @@ export function loadConfig(): AppConfig {
     dropboxClientSecret: env.DROPBOX_CLIENT_SECRET,
     dropboxRefreshToken: env.DROPBOX_REFRESH_TOKEN,
     dropboxTokenStoragePath: env.DROPBOX_TOKEN_STORAGE_PATH,
-    dropboxBasePath: env.DROPBOX_BASE_PATH
+    dropboxBasePath: env.DROPBOX_BASE_PATH,
+    dropboxOAuthComplete: env.STORAGE_TYPE === 'dropbox'
+      ? !!(env.DROPBOX_CLIENT_ID && env.DROPBOX_CLIENT_SECRET && (env.DROPBOX_REFRESH_TOKEN || !!process.env.DROPBOX_TOKEN_STORAGE_PATH))
+      : false,
   };
 }

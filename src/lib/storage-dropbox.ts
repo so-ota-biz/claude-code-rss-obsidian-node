@@ -16,14 +16,15 @@ export class DropboxStorage implements StorageProvider {
     } else {
       // New mode: token manager with automatic refresh
       this.tokenManager = accessTokenOrTokenManager;
-      this.dropbox = new Dropbox(); // Will set access token before each API call
+      // Initialize without access token - will be set per API call
+      this.dropbox = new Dropbox();
     }
   }
 
   private async ensureValidAccessToken(): Promise<void> {
     if (this.tokenManager) {
       const accessToken = await this.tokenManager.getValidAccessToken();
-      // Create a new Dropbox instance with the fresh access token
+      // Create a new Dropbox instance with the fresh access token for each API call
       // This approach works with Dropbox SDK v10
       this.dropbox = new Dropbox({ accessToken });
     }

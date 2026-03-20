@@ -68,6 +68,7 @@ describe('createStorageProvider', () => {
       const config = {
         ...baseConfig,
         storageType: 'dropbox' as const,
+        dropboxOAuthComplete: true,
         dropboxClientId: 'test-client-id',
         dropboxClientSecret: 'test-client-secret',
         dropboxRefreshToken: 'test-refresh-token',
@@ -94,6 +95,7 @@ describe('createStorageProvider', () => {
       const config = {
         ...baseConfig,
         storageType: 'dropbox' as const,
+        dropboxOAuthComplete: true,
         dropboxClientId: 'test-client-id',
         dropboxClientSecret: 'test-client-secret',
         dropboxRefreshToken: 'test-refresh-token'
@@ -113,6 +115,7 @@ describe('createStorageProvider', () => {
       const config = {
         ...baseConfig,
         storageType: 'dropbox' as const,
+        dropboxOAuthComplete: true,
         dropboxClientId: 'test-client-id',
         dropboxClientSecret: 'test-client-secret',
         dropboxTokenStoragePath: '/test/tokens.json'
@@ -155,7 +158,7 @@ describe('createStorageProvider', () => {
       };
       
       expect(() => createStorageProvider(config)).toThrow(
-        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + DROPBOX_REFRESH_TOKEN (OAuth 2.0) is required'
+        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + (DROPBOX_REFRESH_TOKEN or DROPBOX_TOKEN_STORAGE_PATH) (OAuth 2.0) is required'
       );
     });
   });
@@ -165,6 +168,7 @@ describe('createStorageProvider', () => {
       const config = {
         ...baseConfig,
         storageType: 'dropbox' as const,
+        dropboxOAuthComplete: true,
         dropboxClientId: 'test-client-id',
         dropboxClientSecret: 'test-client-secret',
         dropboxRefreshToken: 'test-refresh-token',
@@ -188,6 +192,25 @@ describe('createStorageProvider', () => {
         expect.any(Object), // TokenManager instance, not string
         '/test/path'
       );
+    });
+
+    it('falls back to legacy token when dropboxOAuthComplete is false even if CLIENT_ID/SECRET are present', () => {
+      // Regression: partial OAuth config (missing refresh token + no explicit token storage path)
+      // should not trigger TokenManager mode and should fall back to the valid access token
+      const config = {
+        ...baseConfig,
+        storageType: 'dropbox' as const,
+        dropboxOAuthComplete: false,
+        dropboxClientId: 'test-client-id',
+        dropboxClientSecret: 'test-client-secret',
+        dropboxAccessToken: 'valid-legacy-token',
+        dropboxBasePath: '/test/path'
+      };
+
+      createStorageProvider(config);
+
+      expect(TokenManager).not.toHaveBeenCalled();
+      expect(DropboxStorage).toHaveBeenCalledWith('valid-legacy-token', '/test/path');
     });
   });
 
