@@ -3,12 +3,15 @@ import { mkdir, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ensureDir, readState, writeState, resolveVaultPath } from '../fs.js';
+import { LocalStorage } from '../storage-local.js';
 
 let testDir: string;
+let storage: LocalStorage;
 
 beforeEach(async () => {
   testDir = path.join(tmpdir(), `vitest-fs-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(testDir, { recursive: true });
+  storage = new LocalStorage('/');
 });
 
 afterEach(async () => {
@@ -30,7 +33,7 @@ describe('ensureDir', () => {
 
 describe('readState', () => {
   it('returns empty object when state file does not exist', async () => {
-    const result = await readState(testDir);
+    const result = await readState(storage, testDir);
     expect(result).toEqual({});
   });
 
@@ -38,14 +41,14 @@ describe('readState', () => {
     const stateFile = path.join(testDir, 'state.json');
     const state = { lastRunDate: '2026-03-15', seenIds: ['id1', 'id2'] };
     await import('node:fs/promises').then((m) => m.writeFile(stateFile, JSON.stringify(state)));
-    const result = await readState(testDir);
+    const result = await readState(storage, testDir);
     expect(result).toEqual(state);
   });
 
   it('returns empty object when state file contains invalid JSON', async () => {
     const stateFile = path.join(testDir, 'state.json');
     await import('node:fs/promises').then((m) => m.writeFile(stateFile, 'not json'));
-    const result = await readState(testDir);
+    const result = await readState(storage, testDir);
     expect(result).toEqual({});
   });
 });
@@ -53,7 +56,7 @@ describe('readState', () => {
 describe('writeState', () => {
   it('writes state as JSON to the state file', async () => {
     const state = { lastRunDate: '2026-03-15', seenIds: ['id1'] };
-    await writeState(testDir, state);
+    await writeState(storage, testDir,state);
     const raw = await readFile(path.join(testDir, 'state.json'), 'utf8');
     expect(JSON.parse(raw)).toEqual(state);
   });
@@ -61,14 +64,14 @@ describe('writeState', () => {
   it('creates the directory if it does not exist', async () => {
     const newDir = path.join(testDir, 'new-state-dir');
     const state = { lastRunDate: '2026-03-15' };
-    await writeState(newDir, state);
+    await writeState(storage, newDir, state);
     const raw = await readFile(path.join(newDir, 'state.json'), 'utf8');
     expect(JSON.parse(raw)).toEqual(state);
   });
 
   it('overwrites existing state file', async () => {
-    await writeState(testDir, { lastRunDate: '2026-03-14' });
-    await writeState(testDir, { lastRunDate: '2026-03-15' });
+    await writeState(storage, testDir,{ lastRunDate: '2026-03-14' });
+    await writeState(storage, testDir,{ lastRunDate: '2026-03-15' });
     const raw = await readFile(path.join(testDir, 'state.json'), 'utf8');
     expect(JSON.parse(raw).lastRunDate).toBe('2026-03-15');
   });

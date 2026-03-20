@@ -125,7 +125,7 @@ export class DropboxStorage implements StorageProvider {
         }
         
         // If not unauthorized or out of retries, throw the error
-        throw new Error(`Failed to ${operationName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw new Error(`Failed to ${operationName}: ${error instanceof Error ? error.message : (error as any)?.message ?? 'Unknown error'}`);
       }
     }
     

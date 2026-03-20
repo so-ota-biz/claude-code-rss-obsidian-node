@@ -162,19 +162,21 @@ export class TokenManager {
         clientSecret: this.config.clientSecret,
         refreshToken: this.currentTokenInfo.refreshToken,
       });
-      
-      // Use checkAndRefreshAccessToken which handles the full refresh flow
+
+      // checkAndRefreshAccessToken() is a public method on DropboxAuth
+      // (see https://dropbox.github.io/dropbox-sdk-js/DropboxAuth.html).
+      // It proactively refreshes the access token using the configured refresh token.
       await refreshDropbox.auth.checkAndRefreshAccessToken();
-      
+
       // Get the updated tokens from the auth object
       const newAccessToken = refreshDropbox.auth.getAccessToken();
       const newRefreshToken = refreshDropbox.auth.getRefreshToken();
       const expiresAt = refreshDropbox.auth.getAccessTokenExpiresAt();
-      
+
       if (!newAccessToken) {
-        throw new Error(`No access token received after refresh`);
+        throw new Error('No access token received after refresh');
       }
-      
+
       const newTokenInfo: TokenInfo = {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken || this.currentTokenInfo.refreshToken, // Keep original if not returned
@@ -183,13 +185,12 @@ export class TokenManager {
       };
 
       await this.saveTokenInfo(newTokenInfo);
-      
+
       return newTokenInfo;
     } catch (error) {
-      // Provide more detailed error information for debugging
       if (error && typeof error === 'object' && 'response' in error) {
-        const response = (error as any).response;
-        throw new Error(`Failed to refresh access token: HTTP ${response?.status || 'unknown'} - ${JSON.stringify(response?.body || error)}`);
+        const response = (error as { response?: { status?: number; body?: unknown } }).response;
+        throw new Error(`Failed to refresh access token: HTTP ${response?.status ?? 'unknown'} - ${JSON.stringify(response?.body ?? error)}`);
       }
       throw new Error(`Failed to refresh access token: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     }

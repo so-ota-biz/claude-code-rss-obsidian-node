@@ -3,6 +3,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AppConfig, DailyDigest } from '../../types.js';
+import { LocalStorage } from '../storage-local.js';
 
 // Mock child_process before importing thumbnail
 vi.mock('node:child_process', () => ({
@@ -55,10 +56,12 @@ function makeSpawnMock(exitCode: number) {
 }
 
 let vaultRoot: string;
+let storage: LocalStorage;
 
 beforeEach(async () => {
   vaultRoot = path.join(tmpdir(), `vitest-thumb-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(vaultRoot, { recursive: true });
+  storage = new LocalStorage('/');
   vi.clearAllMocks();
 });
 
@@ -69,14 +72,14 @@ afterEach(async () => {
 describe('maybeGenerateThumbnail', () => {
   it('returns undefined when enableThumbnail is false', async () => {
     const config = { ...baseConfig, enableThumbnail: false, obsidianVaultPath: vaultRoot };
-    const result = await maybeGenerateThumbnail(config, sampleDigest, '2026-03-15', vaultRoot);
+    const result = await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
     expect(result).toBeUndefined();
     expect(spawn).not.toHaveBeenCalled();
   });
 
   it('returns undefined when thumbnailCommand is not set', async () => {
     const config = { ...baseConfig, thumbnailCommand: undefined, obsidianVaultPath: vaultRoot };
-    const result = await maybeGenerateThumbnail(config, sampleDigest, '2026-03-15', vaultRoot);
+    const result = await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
     expect(result).toBeUndefined();
     expect(spawn).not.toHaveBeenCalled();
   });
@@ -84,7 +87,7 @@ describe('maybeGenerateThumbnail', () => {
   it('returns relative path on successful spawn (exit code 0)', async () => {
     makeSpawnMock(0);
     const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
-    const result = await maybeGenerateThumbnail(config, sampleDigest, '2026-03-15', vaultRoot);
+    const result = await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
     expect(result).toBe(`${config.assetsSubdir}/2026-03-15.png`);
     expect(spawn).toHaveBeenCalledOnce();
   });
@@ -93,14 +96,14 @@ describe('maybeGenerateThumbnail', () => {
     makeSpawnMock(1);
     const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
     await expect(
-      maybeGenerateThumbnail(config, sampleDigest, '2026-03-15', vaultRoot)
+      maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot)
     ).rejects.toThrow('exit code 1');
   });
 
   it('passes substituted promptFile and outputPath to spawn args', async () => {
     makeSpawnMock(0);
     const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
-    await maybeGenerateThumbnail(config, sampleDigest, '2026-03-15', vaultRoot);
+    await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
 
     expect(spawn).toHaveBeenCalledOnce();
     const [cmd, args] = vi.mocked(spawn).mock.calls[0];

@@ -117,37 +117,16 @@ describe('DropboxStorage', () => {
   });
 
   describe('ensureDir', () => {
-    it('creates directory when it does not exist', async () => {
-      mockDropbox.filesGetMetadata.mockRejectedValueOnce({ status: 409 });
-      mockDropbox.filesCreateFolderV2.mockResolvedValueOnce({ result: {} });
-
-      await storage.ensureDir('new/dir');
-
-      expect(mockDropbox.filesGetMetadata).toHaveBeenCalledWith({
-        path: '/test/new/dir'
-      });
-      expect(mockDropbox.filesCreateFolderV2).toHaveBeenCalledWith({
-        path: '/test/new/dir',
-        autorename: false,
-      });
-    });
-
-    it('succeeds when directory already exists', async () => {
-      mockDropbox.filesGetMetadata.mockResolvedValueOnce({ result: {} });
-
-      await storage.ensureDir('existing/dir');
-
-      expect(mockDropbox.filesGetMetadata).toHaveBeenCalledWith({
-        path: '/test/existing/dir'
-      });
+    it('returns without error (no-op: Dropbox creates dirs automatically on upload)', async () => {
+      await expect(storage.ensureDir('new/dir')).resolves.toBeUndefined();
+      expect(mockDropbox.filesGetMetadata).not.toHaveBeenCalled();
       expect(mockDropbox.filesCreateFolderV2).not.toHaveBeenCalled();
     });
 
-    it('throws error on unexpected API failure', async () => {
-      mockDropbox.filesGetMetadata.mockRejectedValueOnce({ status: 500 });
-
-      await expect(storage.ensureDir('dir'))
-        .rejects.toThrow('Failed to ensure directory in Dropbox');
+    it('does not call any Dropbox API', async () => {
+      await storage.ensureDir('existing/dir');
+      expect(mockDropbox.filesGetMetadata).not.toHaveBeenCalled();
+      expect(mockDropbox.filesCreateFolderV2).not.toHaveBeenCalled();
     });
   });
 
@@ -179,7 +158,6 @@ describe('DropboxStorage', () => {
       await storageWithTokenManager.writeFile('test.txt', 'content');
 
       expect(mockTokenManager.getValidAccessToken).toHaveBeenCalled();
-      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('fresh-token');
       expect(mockDropbox.filesUpload).toHaveBeenCalled();
     });
 
@@ -196,8 +174,6 @@ describe('DropboxStorage', () => {
 
       expect(mockTokenManager.getValidAccessToken).toHaveBeenCalledTimes(1);
       expect(mockTokenManager.forceRefreshAccessToken).toHaveBeenCalledTimes(1);
-      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('expired-token');
-      expect(mockDropbox.setAccessToken).toHaveBeenCalledWith('refreshed-token');
       expect(mockDropbox.filesUpload).toHaveBeenCalledTimes(2);
     });
 
