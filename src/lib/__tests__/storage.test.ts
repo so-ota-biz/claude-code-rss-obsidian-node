@@ -32,7 +32,7 @@ describe('Storage Factory', () => {
       dropboxAccessToken: undefined
     } as AppConfig;
 
-    expect(() => createStorageProvider(config)).toThrow('Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + (DROPBOX_REFRESH_TOKEN or DROPBOX_TOKEN_STORAGE_PATH) (OAuth 2.0) is required');
+    expect(() => createStorageProvider(config)).toThrow('Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET (OAuth 2.0) is required');
   });
 
   it('defaults to LocalStorage for unknown types', () => {

@@ -264,6 +264,22 @@ accounts:
       expect(config.dropboxRefreshToken).toBeUndefined();
     });
 
+    it('allows OAuth config with CLIENT_ID and CLIENT_SECRET only (uses default token storage path)', () => {
+      setEnv({
+        ...REQUIRED_ENV_WITH_ACCOUNTS,
+        STORAGE_TYPE: 'dropbox',
+        DROPBOX_CLIENT_ID: 'test-client-id',
+        DROPBOX_CLIENT_SECRET: 'test-client-secret'
+      });
+      expect(() => loadConfig()).not.toThrow();
+      const config = loadConfig();
+      expect(config.storageType).toBe('dropbox');
+      expect(config.dropboxClientId).toBe('test-client-id');
+      expect(config.dropboxClientSecret).toBe('test-client-secret');
+      expect(config.dropboxRefreshToken).toBeUndefined();
+      expect(config.dropboxTokenStoragePath).toBe('.state/dropbox-tokens.json');
+    });
+
     it('warns when both access token and OAuth config are provided', () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       
@@ -291,7 +307,7 @@ accounts:
         STORAGE_TYPE: 'dropbox'
       });
       expect(() => loadConfig()).toThrow(
-        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET + (DROPBOX_REFRESH_TOKEN or DROPBOX_TOKEN_STORAGE_PATH) (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
+        'Dropbox configuration error: Either DROPBOX_ACCESS_TOKEN (legacy) or DROPBOX_CLIENT_ID + DROPBOX_CLIENT_SECRET (OAuth 2.0) is required when STORAGE_TYPE is "dropbox"'
       );
     });
 
