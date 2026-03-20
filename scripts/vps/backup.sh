@@ -21,6 +21,7 @@ cd $APP_DIR
 # 設定ファイル
 if [ -f .env ]; then
     cp .env $BACKUP_DIR/env-$DATE
+    chmod 600 $BACKUP_DIR/env-$DATE
     echo "[$DATE] .env file backed up" >> $LOG_FILE
 fi
 
@@ -33,8 +34,15 @@ fi
 # Redis データ
 if docker ps | grep -q rsshub-redis; then
     echo "[$DATE] Creating Redis backup..." >> $LOG_FILE
+    BEFORE_LASTSAVE=$(docker exec rsshub-redis redis-cli LASTSAVE)
     docker exec rsshub-redis redis-cli BGSAVE
-    sleep 5
+    for _ in $(seq 1 30); do
+        sleep 1
+        AFTER_LASTSAVE=$(docker exec rsshub-redis redis-cli LASTSAVE)
+        if [ "$AFTER_LASTSAVE" != "$BEFORE_LASTSAVE" ]; then
+            break
+        fi
+    done
     docker cp rsshub-redis:/data/dump.rdb $BACKUP_DIR/redis-$DATE.rdb
     echo "[$DATE] Redis data backed up" >> $LOG_FILE
 else
@@ -48,8 +56,10 @@ if [ -d logs ]; then
 fi
 
 # システムログ（直近3日分）
-find /home/deploy/logs -name "*.log" -mtime -3 -print0 | tar -czf $BACKUP_DIR/system-logs-$DATE.tar.gz --null -T -
-echo "[$DATE] System logs backed up" >> $LOG_FILE
+if [ -d /home/deploy/logs ]; then
+    find /home/deploy/logs -name "*.log" -mtime -3 -print0 | tar -czf "$BACKUP_DIR/system-logs-$DATE.tar.gz" --null -T -
+    echo "[$DATE] System logs backed up" >> $LOG_FILE
+fi
 
 # 古いバックアップファイルを削除（30日以上前）
 find $BACKUP_DIR -name "*" -mtime +30 -delete

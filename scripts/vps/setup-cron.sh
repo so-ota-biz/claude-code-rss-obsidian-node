@@ -11,16 +11,20 @@ LOG_DIR="/home/deploy/logs"
 
 echo "=== cron ジョブ設定開始 ==="
 
-# 現在の crontab をバックアップ
-crontab -l > /tmp/crontab.backup 2>/dev/null || touch /tmp/crontab.backup
+# 現在の crontab を取得（存在しない場合は空）
+crontab -l > /tmp/crontab.current 2>/dev/null || touch /tmp/crontab.current
 
-# 新しい crontab を作成
-cat > /tmp/new_crontab << EOF
+# このスクリプトが追加するジョブ（重複登録防止のため既存エントリを削除してから追加）
+sed -i '/claude-code-rss/d;/health-check\.sh/d;/backup\.sh/d;/rsshub:down.*rsshub:up/d;/DEBIAN_FRONTEND.*apt upgrade/d' /tmp/crontab.current
+
+# 新しいジョブを追記
+cat >> /tmp/crontab.current << EOF
+
 # RSS収集バッチ実行（毎日 8:00 JST = 23:00 UTC）
 0 23 * * * cd $APP_DIR && /usr/bin/npm run run >> $LOG_DIR/claude-code-digest.log 2>&1
 
 # ヘルスチェック（30分間隔）
-30 * * * * $APP_DIR/scripts/vps/health-check.sh
+*/30 * * * * $APP_DIR/scripts/vps/health-check.sh
 
 # バックアップ（毎日 2:00 JST = 17:00 UTC）
 0 17 * * * $APP_DIR/scripts/vps/backup.sh >> $LOG_DIR/backup.log 2>&1
@@ -29,12 +33,12 @@ cat > /tmp/new_crontab << EOF
 0 17 * * 0 cd $APP_DIR && npm run rsshub:down && sleep 10 && npm run rsshub:up
 
 # システム更新（毎週日曜 3:00 JST = 18:00 UTC）
-0 18 * * 0 DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y >> $LOG_DIR/system-update.log 2>&1
+0 18 * * 0 DEBIAN_FRONTEND=noninteractive sudo apt update && sudo apt upgrade -y >> $LOG_DIR/system-update.log 2>&1
 
 EOF
 
 # crontab を設定
-crontab /tmp/new_crontab
+crontab /tmp/crontab.current
 
 echo "✅ cron ジョブが設定されました"
 echo ""

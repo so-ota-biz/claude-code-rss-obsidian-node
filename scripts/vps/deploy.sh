@@ -51,23 +51,32 @@ mkdir -p .state logs
 echo "RSSHub + Redis を起動中..."
 npm run rsshub:up
 
-# 起動確認
-sleep 10
+# 起動確認（最大60秒リトライ）
 echo "サービス起動状況を確認中..."
-if curl -f -s http://localhost:1200/ > /dev/null; then
+ok=0
+for _ in $(seq 1 30); do
+    if curl -f -s --max-time 5 http://localhost:1200/ > /dev/null 2>&1; then
+        ok=1
+        break
+    fi
+    sleep 2
+done
+
+if [ "$ok" -eq 1 ]; then
     echo "✅ RSSHub が正常に起動しました"
 else
     echo "❌ RSSHub の起動に失敗しました"
-    npm run rsshub:logs
+    docker logs rsshub --tail=50
     exit 1
 fi
 
 # テスト実行
 echo "動作テストを実行中..."
-timeout 60 npm run run || {
-    echo "⚠️  初回実行でタイムアウトまたはエラーが発生しました"
+if ! timeout 60 npm run run; then
+    echo "❌ 初回実行でタイムアウトまたはエラーが発生しました"
     echo "   ログを確認して問題を解決してください"
-}
+    exit 1
+fi
 
 echo "=== デプロイ完了 ==="
 echo ""

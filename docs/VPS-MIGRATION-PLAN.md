@@ -123,7 +123,8 @@ apt install -y docker-compose-plugin
 
 # ファイアウォール設定
 ufw allow ssh
-ufw allow 1200/tcp  # RSSHub
+# RSSHub は原則内部利用。外部公開が必要な場合のみ開放
+# ufw allow 1200/tcp
 ufw --force enable
 
 # 作業ユーザー作成
@@ -320,7 +321,7 @@ fi
 chmod +x ~/scripts/health-check.sh
 
 # cron に追加（30分間隔）
-30 * * * * /home/deploy/scripts/health-check.sh
+*/30 * * * * /home/deploy/scripts/health-check.sh
 ```
 
 #### 5.2 バックアップスクリプト
@@ -364,7 +365,8 @@ sudo ufw status
 
 # 必要最小限のポートのみ開放
 sudo ufw allow ssh      # 22
-sudo ufw allow 1200/tcp # RSSHub（必要に応じて外部公開）
+# RSSHub は原則内部利用。外部公開が必要な場合のみ開放
+# sudo ufw allow 1200/tcp
 ```
 
 ### SSH セキュリティ強化

@@ -11,18 +11,21 @@ APP_DIR="/home/deploy/claude-code-rss"
 echo "[$DATE] Health check started" >> $LOG_FILE
 
 # RSSHub チェック
-if curl -f -s http://localhost:1200/ > /dev/null; then
+if curl -f -s --max-time 10 http://localhost:1200/ > /dev/null; then
     echo "[$DATE] RSSHub: OK" >> $LOG_FILE
 else
     echo "[$DATE] RSSHub: ERROR - attempting restart" >> $LOG_FILE
-    cd $APP_DIR
+    cd "$APP_DIR" || {
+        echo "[$DATE] ERROR: APP_DIR not found: $APP_DIR" >> "$LOG_FILE"
+        exit 1
+    }
     npm run rsshub:down
     sleep 5
     npm run rsshub:up
     sleep 10
-    
+
     # 再チェック
-    if curl -f -s http://localhost:1200/ > /dev/null; then
+    if curl -f -s --max-time 10 http://localhost:1200/ > /dev/null; then
         echo "[$DATE] RSSHub: RECOVERED after restart" >> $LOG_FILE
     else
         echo "[$DATE] RSSHub: FAILED to recover" >> $LOG_FILE
@@ -56,11 +59,11 @@ else
 fi
 
 # Docker コンテナ状態チェック
-if ! docker ps | grep -q rsshub; then
+if ! docker ps --format '{{.Names}}' | grep -q '^rsshub$'; then
     echo "[$DATE] Docker: RSSHub container not running" >> $LOG_FILE
 fi
 
-if ! docker ps | grep -q rsshub-redis; then
+if ! docker ps --format '{{.Names}}' | grep -q '^rsshub-redis$'; then
     echo "[$DATE] Docker: Redis container not running" >> $LOG_FILE
 fi
 
