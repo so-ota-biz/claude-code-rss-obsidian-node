@@ -3,13 +3,16 @@ import { mkdir, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { writeDigestMarkdown, writeRawMarkdown } from '../markdown.js';
+import { LocalStorage } from '../storage-local.js';
 import type { DailyDigest, ProcessedPost } from '../../types.js';
 
 let vaultRoot: string;
+let storage: LocalStorage;
 
 beforeEach(async () => {
   vaultRoot = path.join(tmpdir(), `vitest-md-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(vaultRoot, { recursive: true });
+  storage = new LocalStorage('/');
 });
 
 afterEach(async () => {
@@ -46,6 +49,7 @@ const samplePosts: ProcessedPost[] = [
 describe('writeDigestMarkdown', () => {
   it('creates the output file at the expected path', async () => {
     const filePath = await writeDigestMarkdown({
+      storage,
       vaultRoot,
       outputSubdir: 'AI Digest/Claude Code',
       day: '2026-03-15',
@@ -58,6 +62,7 @@ describe('writeDigestMarkdown', () => {
 
   it('includes frontmatter with title, date, and tags', async () => {
     const filePath = await writeDigestMarkdown({
+      storage,
       vaultRoot,
       outputSubdir: 'AI Digest',
       day: '2026-03-15',
@@ -71,6 +76,7 @@ describe('writeDigestMarkdown', () => {
 
   it('includes digest title and summary', async () => {
     const filePath = await writeDigestMarkdown({
+      storage,
       vaultRoot,
       outputSubdir: 'AI Digest',
       day: '2026-03-15',
@@ -83,6 +89,7 @@ describe('writeDigestMarkdown', () => {
 
   it('includes highlight headline and points', async () => {
     const filePath = await writeDigestMarkdown({
+      storage,
       vaultRoot,
       outputSubdir: 'AI Digest',
       day: '2026-03-15',
@@ -96,6 +103,7 @@ describe('writeDigestMarkdown', () => {
 
   it('includes notable accounts', async () => {
     const filePath = await writeDigestMarkdown({
+      storage,
       vaultRoot,
       outputSubdir: 'AI Digest',
       day: '2026-03-15',
@@ -108,6 +116,7 @@ describe('writeDigestMarkdown', () => {
 
   it('includes thumbnail info when thumbnailRelativePath is provided', async () => {
     const filePath = await writeDigestMarkdown({
+      storage,
       vaultRoot,
       outputSubdir: 'AI Digest',
       day: '2026-03-15',
@@ -121,6 +130,7 @@ describe('writeDigestMarkdown', () => {
 
   it('does not include thumbnail when thumbnailRelativePath is not provided', async () => {
     const filePath = await writeDigestMarkdown({
+      storage,
       vaultRoot,
       outputSubdir: 'AI Digest',
       day: '2026-03-15',
@@ -134,6 +144,7 @@ describe('writeDigestMarkdown', () => {
 describe('writeRawMarkdown', () => {
   it('creates the output file at the expected path', async () => {
     const filePath = await writeRawMarkdown({
+      storage,
       vaultRoot,
       rawSubdir: 'AI Digest/raw',
       day: '2026-03-15',
@@ -146,6 +157,7 @@ describe('writeRawMarkdown', () => {
 
   it('includes frontmatter', async () => {
     const filePath = await writeRawMarkdown({
+      storage,
       vaultRoot,
       rawSubdir: 'AI Digest/raw',
       day: '2026-03-15',
@@ -158,6 +170,7 @@ describe('writeRawMarkdown', () => {
 
   it('includes post account, link, publishedAt, language, content, translatedText', async () => {
     const filePath = await writeRawMarkdown({
+      storage,
       vaultRoot,
       rawSubdir: 'AI Digest/raw',
       day: '2026-03-15',
@@ -174,6 +187,7 @@ describe('writeRawMarkdown', () => {
 
   it('writes an empty post list without error', async () => {
     const filePath = await writeRawMarkdown({
+      storage,
       vaultRoot,
       rawSubdir: 'AI Digest/raw',
       day: '2026-03-15',

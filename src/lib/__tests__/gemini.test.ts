@@ -123,9 +123,16 @@ describe('GeminiClient.buildDigest', () => {
   });
 
   it('throws on non-200 response', async () => {
+    vi.useFakeTimers();
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse({}, 500));
 
     const client = makeClient();
-    await expect(client.buildDigest([makePost()], '2026-03-15', 5)).rejects.toThrow('Gemini API error 500');
+    const rejectPromise = expect(
+      client.buildDigest([makePost()], '2026-03-15', 5)
+    ).rejects.toThrow('Gemini API error 500');
+
+    await vi.runAllTimersAsync();
+    await rejectPromise;
+    vi.useRealTimers();
   });
 });
