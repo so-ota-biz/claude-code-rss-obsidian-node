@@ -51,7 +51,8 @@ beforeEach(() => {
     ...Object.keys(REQUIRED_ENV_WITH_ACCOUNTS), 
     ...Object.keys(REQUIRED_ENV_WITHOUT_ACCOUNTS),
     'STORAGE_TYPE', 'DROPBOX_ACCESS_TOKEN', 'DROPBOX_CLIENT_ID', 'DROPBOX_CLIENT_SECRET',
-    'DROPBOX_REFRESH_TOKEN', 'DROPBOX_TOKEN_STORAGE_PATH', 'DROPBOX_BASE_PATH'
+    'DROPBOX_REFRESH_TOKEN', 'DROPBOX_TOKEN_STORAGE_PATH', 'DROPBOX_BASE_PATH',
+    'LOOKBACK_DAYS'
   ];
   for (const key of allEnvKeys) {
     savedEnv[key] = process.env[key];
@@ -174,6 +175,7 @@ accounts:
       expect(config.thumbnailImageExt).toBe('png');
       expect(config.storageType).toBe('local');
       expect(config.dropboxBasePath).toBe('/');
+      expect(config.lookbackDays).toBe(1);
     });
 
     it('parses boolean env vars: "true" → true', () => {

@@ -42,6 +42,7 @@ export type AppConfig = {
   assetsSubdir: string;
   stateDir: string;
   maxPostsPerAccount: number;
+  lookbackDays: number;
   onlyIncludeOriginalPosts: boolean;
   skipRetweets: boolean;
   skipReplies: boolean;

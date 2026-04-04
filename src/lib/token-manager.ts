@@ -1,6 +1,5 @@
-import { Dropbox } from 'dropbox';
+import { DropboxAuth } from 'dropbox';
 import { promises as fs } from 'fs';
-import * as crypto from 'crypto';
 import { join } from 'path';
 
 export interface TokenInfo {
@@ -18,48 +17,40 @@ export interface TokenManagerConfig {
 }
 
 export class TokenManager {
-  private dropbox: Dropbox;
+  private auth: DropboxAuth;
   private config: TokenManagerConfig;
   private currentTokenInfo: TokenInfo | null = null;
   private refreshPromise: Promise<TokenInfo> | null = null;
 
   constructor(config: TokenManagerConfig) {
     this.config = config;
-    this.dropbox = new Dropbox({
+    this.auth = new DropboxAuth({
       clientId: config.clientId,
     });
   }
 
   /**
-   * Generate PKCE parameters for OAuth 2.0 flow
-   */
-  private generatePKCEParams(): { codeVerifier: string; codeChallenge: string } {
-    const codeVerifier = crypto.randomBytes(32).toString('base64url');
-    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
-    return { codeVerifier, codeChallenge };
-  }
-
-  /**
    * Generate OAuth 2.0 authorization URL for initial setup
+   * PKCE code generation is handled internally by the SDK when usePKCE=true.
    */
   async generateAuthUrl(redirectUri = 'http://localhost:8080/callback'): Promise<{
     url: string;
     codeVerifier: string;
   }> {
-    const { codeVerifier, codeChallenge } = this.generatePKCEParams();
-    
-    const authUrl = this.dropbox.getAuthenticationUrl(
+    const authUrl = await this.auth.getAuthenticationUrl(
       redirectUri,
       undefined,
       'code',
       'offline',
       undefined,
-      undefined,
-      true, // use PKCE
-      codeChallenge
+      'none',
+      true  // usePKCE — SDK generates and stores codeVerifier/codeChallenge internally
     );
 
-    return { url: authUrl, codeVerifier };
+    // codeVerifier is stored internally by the SDK after getAuthenticationUrl
+    const codeVerifier = this.auth.getCodeVerifier();
+
+    return { url: String(authUrl), codeVerifier };
   }
 
   /**
@@ -71,17 +62,15 @@ export class TokenManager {
     redirectUri = 'http://localhost:8080/callback'
   ): Promise<TokenInfo> {
     try {
-      const response = await this.dropbox.getAccessTokenFromCode(
-        redirectUri,
-        authCode,
-        codeVerifier
-      );
+      // codeVerifier param is retained for API compatibility but the SDK uses its internally stored value
+      const response = await this.auth.getAccessTokenFromCode(redirectUri, authCode);
 
+      const result = response.result as { access_token: string; refresh_token: string; expires_in: number; token_type: string };
       const tokenInfo: TokenInfo = {
-        accessToken: response.result.access_token,
-        refreshToken: response.result.refresh_token,
-        expiresAt: Date.now() + (response.result.expires_in * 1000), // Convert seconds to milliseconds
-        tokenType: response.result.token_type,
+        accessToken: result.access_token,
+        refreshToken: result.refresh_token,
+        expiresAt: Date.now() + (result.expires_in * 1000), // Convert seconds to milliseconds
+        tokenType: result.token_type,
       };
 
       await this.saveTokenInfo(tokenInfo);
@@ -155,23 +144,18 @@ export class TokenManager {
     }
 
     try {
-      // Create a new Dropbox instance with refresh token for token refresh
-      // Note: clientSecret is required for refresh token flow in Dropbox SDK v10
-      const refreshDropbox = new Dropbox({
+      // Create a new DropboxAuth instance with refresh token for token refresh
+      const refreshAuth = new DropboxAuth({
         clientId: this.config.clientId,
         clientSecret: this.config.clientSecret,
         refreshToken: this.currentTokenInfo.refreshToken,
       });
 
-      // checkAndRefreshAccessToken() is a public method on DropboxAuth
-      // (see https://dropbox.github.io/dropbox-sdk-js/DropboxAuth.html).
-      // It proactively refreshes the access token using the configured refresh token.
-      await refreshDropbox.auth.checkAndRefreshAccessToken();
+      await refreshAuth.checkAndRefreshAccessToken();
 
-      // Get the updated tokens from the auth object
-      const newAccessToken = refreshDropbox.auth.getAccessToken();
-      const newRefreshToken = refreshDropbox.auth.getRefreshToken();
-      const expiresAt = refreshDropbox.auth.getAccessTokenExpiresAt();
+      const newAccessToken = refreshAuth.getAccessToken();
+      const newRefreshToken = refreshAuth.getRefreshToken();
+      const expiresAt = refreshAuth.getAccessTokenExpiresAt();
 
       if (!newAccessToken) {
         throw new Error('No access token received after refresh');

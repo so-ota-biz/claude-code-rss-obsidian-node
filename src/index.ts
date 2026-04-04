@@ -13,7 +13,7 @@ import type { FeedPost } from './types.js';
 async function main(): Promise<void> {
   const config = loadConfig();
   const storage = createStorageProvider(config);
-  const range = getTargetDateRange(config.timezone);
+  const range = getTargetDateRange(config.timezone, config.lookbackDays);
   const stateDir = config.storageType === 'dropbox' 
     ? config.stateDir  // Dropboxの場合は相対パスのまま使用
     : path.resolve(config.stateDir);  // ローカルの場合は絶対パスに変換

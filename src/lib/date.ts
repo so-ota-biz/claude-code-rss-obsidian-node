@@ -1,4 +1,4 @@
-export function getTargetDateRange(timezone: string, now = new Date()): { day: string; startIso: string; endIso: string } {
+export function getTargetDateRange(timezone: string, lookbackDays = 1, now = new Date()): { day: string; startIso: string; endIso: string } {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
     year: 'numeric',
@@ -19,8 +19,15 @@ export function getTargetDateRange(timezone: string, now = new Date()): { day: s
   const d = String(yesterday.getUTCDate()).padStart(2, '0');
   const dayLabel = `${y}-${m}-${d}`;
 
+  // startDay goes back lookbackDays from today (endIso). dayLabel (for file naming) always stays as yesterday.
+  const startDay = new Date(utcMidnight.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+  const sy = startDay.getUTCFullYear();
+  const sm = String(startDay.getUTCMonth() + 1).padStart(2, '0');
+  const sd = String(startDay.getUTCDate()).padStart(2, '0');
+  const startDayLabel = `${sy}-${sm}-${sd}`;
+
   // Converts local day bounds in timezone to UTC by sampling offsets around the target dates.
-  const startIso = zonedLocalToUtcIso(`${dayLabel}T00:00:00`, timezone);
+  const startIso = zonedLocalToUtcIso(`${startDayLabel}T00:00:00`, timezone);
   const endIso = zonedLocalToUtcIso(nextDay(dayLabel) + 'T00:00:00', timezone);
 
   return { day: dayLabel, startIso, endIso };

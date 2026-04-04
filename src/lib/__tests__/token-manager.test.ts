@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TokenManager } from '../token-manager.js';
 import type { TokenInfo, TokenManagerConfig } from '../token-manager.js';
 import { promises as fs } from 'fs';
-import * as crypto from 'crypto';
 
 // Mock external dependencies
 vi.mock('fs', () => ({
@@ -13,29 +12,18 @@ vi.mock('fs', () => ({
   }
 }));
 
-vi.mock('crypto', () => ({
-  randomBytes: vi.fn(),
-  createHash: vi.fn(() => ({
-    update: vi.fn().mockReturnThis(),
-    digest: vi.fn()
-  }))
-}));
-
-const mockAuth = {
+const mockDropbox = {
+  getAuthenticationUrl: vi.fn(),
+  getAccessTokenFromCode: vi.fn(),
+  getCodeVerifier: vi.fn(),
   checkAndRefreshAccessToken: vi.fn(),
   getAccessToken: vi.fn(),
   getRefreshToken: vi.fn(),
   getAccessTokenExpiresAt: vi.fn(),
 };
 
-const mockDropbox = {
-  getAuthenticationUrl: vi.fn(),
-  getAccessTokenFromCode: vi.fn(),
-  auth: mockAuth,
-};
-
 vi.mock('dropbox', () => ({
-  Dropbox: function MockDropbox() {
+  DropboxAuth: function MockDropboxAuth() {
     return mockDropbox;
   }
 }));
@@ -77,18 +65,9 @@ describe('TokenManager', () => {
   describe('generateAuthUrl', () => {
     it('generates OAuth authorization URL with PKCE', async () => {
       const mockCodeVerifier = 'mock-code-verifier';
-      const mockCodeChallenge = 'mock-code-challenge';
-      
-      (crypto.randomBytes as any).mockReturnValue({
-        toString: vi.fn().mockReturnValue(mockCodeVerifier)
-      });
-      
-      (crypto.createHash as any).mockReturnValue({
-        update: vi.fn().mockReturnThis(),
-        digest: vi.fn().mockReturnValue(mockCodeChallenge)
-      });
 
       mockDropbox.getAuthenticationUrl.mockReturnValue('https://dropbox.com/oauth/authorize?...');
+      mockDropbox.getCodeVerifier.mockReturnValue(mockCodeVerifier);
 
       const result = await tokenManager.generateAuthUrl('http://localhost:3000/callback');
 
@@ -103,14 +82,14 @@ describe('TokenManager', () => {
         'code',
         'offline',
         undefined,
-        undefined,
-        true, // use PKCE
-        mockCodeChallenge
+        'none',
+        true  // usePKCE — SDK generates codeVerifier/codeChallenge internally
       );
     });
 
     it('uses default redirect URI', async () => {
       mockDropbox.getAuthenticationUrl.mockReturnValue('https://dropbox.com/oauth/authorize');
+      mockDropbox.getCodeVerifier.mockReturnValue('any-verifier');
 
       await tokenManager.generateAuthUrl();
 
@@ -120,9 +99,8 @@ describe('TokenManager', () => {
         'code',
         'offline',
         undefined,
-        undefined,
-        true,
-        expect.anything() // code challenge will vary
+        'none',
+        true
       );
     });
   });
@@ -153,8 +131,8 @@ describe('TokenManager', () => {
 
       expect(mockDropbox.getAccessTokenFromCode).toHaveBeenCalledWith(
         'http://localhost:8080/callback',
-        'auth-code',
-        'code-verifier'
+        'auth-code'
+        // codeVerifier is used internally by the SDK, not passed as an argument
       );
 
       expect(fs.writeFile).toHaveBeenCalledWith(
@@ -214,10 +192,10 @@ describe('TokenManager', () => {
     });
 
     it('successfully refreshes access token', async () => {
-      mockAuth.checkAndRefreshAccessToken.mockResolvedValue(undefined);
-      mockAuth.getAccessToken.mockReturnValue('refreshed-access-token');
-      mockAuth.getRefreshToken.mockReturnValue(undefined);
-      mockAuth.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
+      mockDropbox.checkAndRefreshAccessToken.mockResolvedValue(undefined);
+      mockDropbox.getAccessToken.mockReturnValue('refreshed-access-token');
+      mockDropbox.getRefreshToken.mockReturnValue(undefined);
+      mockDropbox.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
       (fs.mkdir as any).mockResolvedValue(undefined);
       (fs.writeFile as any).mockResolvedValue(undefined);
 
@@ -225,7 +203,7 @@ describe('TokenManager', () => {
 
       expect(result.accessToken).toBe('refreshed-access-token');
       expect(result.refreshToken).toBe('test-refresh-token'); // Should keep original refresh token
-      expect(mockAuth.checkAndRefreshAccessToken).toHaveBeenCalled();
+      expect(mockDropbox.checkAndRefreshAccessToken).toHaveBeenCalled();
     });
 
     it('throws error when no refresh token available', async () => {
@@ -237,7 +215,7 @@ describe('TokenManager', () => {
     });
 
     it('throws error on API failure', async () => {
-      mockAuth.checkAndRefreshAccessToken.mockRejectedValue(new Error('Invalid refresh token'));
+      mockDropbox.checkAndRefreshAccessToken.mockRejectedValue(new Error('Invalid refresh token'));
 
       await expect(
         tokenManager['refreshAccessToken']()
@@ -274,10 +252,10 @@ describe('TokenManager', () => {
 
       tokenManager['currentTokenInfo'] = expiredTokenInfo;
 
-      mockAuth.checkAndRefreshAccessToken.mockResolvedValue(undefined);
-      mockAuth.getAccessToken.mockReturnValue('refreshed-access-token');
-      mockAuth.getRefreshToken.mockReturnValue(undefined);
-      mockAuth.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
+      mockDropbox.checkAndRefreshAccessToken.mockResolvedValue(undefined);
+      mockDropbox.getAccessToken.mockReturnValue('refreshed-access-token');
+      mockDropbox.getRefreshToken.mockReturnValue(undefined);
+      mockDropbox.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
       (fs.mkdir as any).mockResolvedValue(undefined);
       (fs.writeFile as any).mockResolvedValue(undefined);
 
@@ -294,10 +272,10 @@ describe('TokenManager', () => {
 
       tokenManager['currentTokenInfo'] = soonToExpireTokenInfo;
 
-      mockAuth.checkAndRefreshAccessToken.mockResolvedValue(undefined);
-      mockAuth.getAccessToken.mockReturnValue('refreshed-access-token');
-      mockAuth.getRefreshToken.mockReturnValue(undefined);
-      mockAuth.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
+      mockDropbox.checkAndRefreshAccessToken.mockResolvedValue(undefined);
+      mockDropbox.getAccessToken.mockReturnValue('refreshed-access-token');
+      mockDropbox.getRefreshToken.mockReturnValue(undefined);
+      mockDropbox.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
       (fs.mkdir as any).mockResolvedValue(undefined);
       (fs.writeFile as any).mockResolvedValue(undefined);
 
@@ -310,10 +288,10 @@ describe('TokenManager', () => {
       tokenManager['currentTokenInfo'] = null;
       (fs.readFile as any).mockRejectedValue({ code: 'ENOENT' });
 
-      mockAuth.checkAndRefreshAccessToken.mockResolvedValue(undefined);
-      mockAuth.getAccessToken.mockReturnValue('initial-access-token');
-      mockAuth.getRefreshToken.mockReturnValue(undefined);
-      mockAuth.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
+      mockDropbox.checkAndRefreshAccessToken.mockResolvedValue(undefined);
+      mockDropbox.getAccessToken.mockReturnValue('initial-access-token');
+      mockDropbox.getRefreshToken.mockReturnValue(undefined);
+      mockDropbox.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
       (fs.mkdir as any).mockResolvedValue(undefined);
       (fs.writeFile as any).mockResolvedValue(undefined);
 
@@ -344,10 +322,10 @@ describe('TokenManager', () => {
 
       tokenManager['currentTokenInfo'] = expiredTokenInfo;
 
-      mockAuth.checkAndRefreshAccessToken.mockResolvedValue(undefined);
-      mockAuth.getAccessToken.mockReturnValue('refreshed-access-token');
-      mockAuth.getRefreshToken.mockReturnValue(undefined);
-      mockAuth.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
+      mockDropbox.checkAndRefreshAccessToken.mockResolvedValue(undefined);
+      mockDropbox.getAccessToken.mockReturnValue('refreshed-access-token');
+      mockDropbox.getRefreshToken.mockReturnValue(undefined);
+      mockDropbox.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
       (fs.mkdir as any).mockResolvedValue(undefined);
       (fs.writeFile as any).mockResolvedValue(undefined);
 
@@ -366,23 +344,23 @@ describe('TokenManager', () => {
       });
 
       // Refresh should only be called once
-      expect(mockAuth.checkAndRefreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(mockDropbox.checkAndRefreshAccessToken).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('initializeWithRefreshToken', () => {
     it('initializes and gets access token', async () => {
-      mockAuth.checkAndRefreshAccessToken.mockResolvedValue(undefined);
-      mockAuth.getAccessToken.mockReturnValue('initial-access-token');
-      mockAuth.getRefreshToken.mockReturnValue(undefined);
-      mockAuth.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
+      mockDropbox.checkAndRefreshAccessToken.mockResolvedValue(undefined);
+      mockDropbox.getAccessToken.mockReturnValue('initial-access-token');
+      mockDropbox.getRefreshToken.mockReturnValue(undefined);
+      mockDropbox.getAccessTokenExpiresAt.mockReturnValue(new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString());
       (fs.mkdir as any).mockResolvedValue(undefined);
       (fs.writeFile as any).mockResolvedValue(undefined);
 
       await tokenManager.initializeWithRefreshToken('new-refresh-token');
 
       expect(tokenManager['currentTokenInfo']?.refreshToken).toBe('new-refresh-token');
-      expect(mockAuth.checkAndRefreshAccessToken).toHaveBeenCalled();
+      expect(mockDropbox.checkAndRefreshAccessToken).toHaveBeenCalled();
     });
   });
 

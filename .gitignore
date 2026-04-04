@@ -3,3 +3,5 @@ node_modules
 .state
 *.log
 .claude
+.DS_Store
+.test-vault
