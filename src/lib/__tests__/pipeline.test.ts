@@ -27,6 +27,7 @@ const baseConfig: AppConfig = {
   modelText: 'gemini-2.5-flash-lite',
   thumbnailPromptStyle: 'clean, modern',
   requestTimeoutMs: 30000,
+  translateBatchSize: 10,
   storageType: 'local'
 };
 
@@ -45,6 +46,9 @@ function makePost(overrides: Partial<FeedPost> = {}): FeedPost {
 function makeMockGemini(overrides: Partial<GeminiClient> = {}): GeminiClient {
   return {
     translate: vi.fn().mockResolvedValue('翻訳テキスト'),
+    translateBatch: vi.fn().mockImplementation((texts: string[]) =>
+      Promise.resolve(texts.map(() => '翻訳テキスト'))
+    ),
     buildDigest: vi.fn().mockResolvedValue({
       title: 'Digest',
       summary: 'Summary',
@@ -98,23 +102,48 @@ describe('processPosts', () => {
     expect(result).toHaveLength(1);
   });
 
-  it('calls gemini.translate for English posts when enableTranslation is true', async () => {
+  it('calls gemini.translateBatch for English posts when enableTranslation is true', async () => {
     const posts = [makePost({ content: 'This is an English post with enough characters to qualify' })];
     await processPosts(posts, baseConfig, gemini);
-    expect(gemini.translate).toHaveBeenCalledOnce();
+    expect(gemini.translateBatch).toHaveBeenCalledOnce();
+    expect(gemini.translateBatch).toHaveBeenCalledWith(
+      ['This is an English post with enough characters to qualify'],
+      baseConfig.translateBatchSize
+    );
   });
 
-  it('does not call gemini.translate for Japanese posts', async () => {
+  it('does not call gemini.translateBatch for Japanese posts', async () => {
     const posts = [makePost({ content: 'これは日本語の投稿です。テスト。' })];
     await processPosts(posts, baseConfig, gemini);
-    expect(gemini.translate).not.toHaveBeenCalled();
+    expect(gemini.translateBatch).not.toHaveBeenCalled();
   });
 
-  it('does not call gemini.translate when enableTranslation is false', async () => {
+  it('does not call gemini.translateBatch when enableTranslation is false', async () => {
     const config = { ...baseConfig, enableTranslation: false };
     const posts = [makePost({ content: 'This is an English post with many characters here' })];
     await processPosts(posts, config, gemini);
-    expect(gemini.translate).not.toHaveBeenCalled();
+    expect(gemini.translateBatch).not.toHaveBeenCalled();
+  });
+
+  it('passes only English texts to translateBatch when posts are mixed language', async () => {
+    const posts = [
+      makePost({ content: 'This is an English post', id: 'en-1', link: 'https://x.com/user1/status/1' }),
+      makePost({ content: 'これは日本語の投稿です。テスト用テキスト。', id: 'ja-1', link: 'https://x.com/user1/status/2' })
+    ];
+    const result = await processPosts(posts, baseConfig, gemini);
+    expect(gemini.translateBatch).toHaveBeenCalledWith(['This is an English post'], baseConfig.translateBatchSize);
+    expect(result.find(p => p.id === 'ja-1')?.translatedText).toBe('これは日本語の投稿です。テスト用テキスト。');
+  });
+
+  it('calls translateBatch with all English texts in one call when within batchSize', async () => {
+    const posts = [
+      makePost({ content: 'First English post content here', id: 'en-1', link: 'https://x.com/user1/status/1' }),
+      makePost({ content: 'Second English post content here', id: 'en-2', link: 'https://x.com/user1/status/2' }),
+      makePost({ content: 'Third English post content here', id: 'en-3', link: 'https://x.com/user1/status/3' })
+    ];
+    await processPosts(posts, baseConfig, gemini);
+    expect(gemini.translateBatch).toHaveBeenCalledOnce();
+    expect((gemini.translateBatch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toHaveLength(3);
   });
 
   it('sorts result by publishedAt ascending', async () => {

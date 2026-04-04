@@ -92,6 +92,66 @@ describe('GeminiClient.translate', () => {
   });
 });
 
+describe('GeminiClient.translateBatch', () => {
+  function makeBatchResponse(translations: string[]): Response {
+    const responseBody = {
+      candidates: [{ content: { parts: [{ text: JSON.stringify(translations) }] } }]
+    };
+    return makeFetchResponse(responseBody);
+  }
+
+  it('returns empty array without calling fetch when texts is empty', async () => {
+    const client = makeClient();
+    const result = await client.translateBatch([], 10);
+    expect(result).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns translations for a single batch (texts <= batchSize)', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeBatchResponse(['翻訳1', '翻訳2', '翻訳3']));
+    const client = makeClient();
+    const result = await client.translateBatch(['text1', 'text2', 'text3'], 10);
+    expect(result).toEqual(['翻訳1', '翻訳2', '翻訳3']);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('splits into multiple batches when texts exceed batchSize', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeBatchResponse(['翻訳1', '翻訳2']))
+      .mockResolvedValueOnce(makeBatchResponse(['翻訳3', '翻訳4']))
+      .mockResolvedValueOnce(makeBatchResponse(['翻訳5']));
+    const client = makeClient();
+    const result = await client.translateBatch(['t1', 't2', 't3', 't4', 't5'], 2);
+    expect(result).toEqual(['翻訳1', '翻訳2', '翻訳3', '翻訳4', '翻訳5']);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('handles a single text', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeBatchResponse(['翻訳のみ']));
+    const client = makeClient();
+    const result = await client.translateBatch(['only one'], 10);
+    expect(result).toEqual(['翻訳のみ']);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when response array length does not match chunk size', async () => {
+    const responseBody = {
+      candidates: [{ content: { parts: [{ text: JSON.stringify(['翻訳1']) }] } }]
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(responseBody));
+    const client = makeClient();
+    await expect(client.translateBatch(['text1', 'text2'], 10)).rejects.toThrow(
+      'translateBatch: expected array of length 2, got 1'
+    );
+  });
+
+  it('throws on non-200 HTTP response', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ error: 'bad request' }, 400));
+    const client = makeClient();
+    await expect(client.translateBatch(['hello'], 10)).rejects.toThrow('Gemini API error 400');
+  });
+});
+
 describe('GeminiClient.buildDigest', () => {
   it('returns parsed DailyDigest from valid JSON response', async () => {
     const digest = {

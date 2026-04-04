@@ -8,8 +8,11 @@ export async function processPosts(
   gemini: GeminiClient
 ): Promise<ProcessedPost[]> {
   const seen = new Set<string>();
-  const accepted: ProcessedPost[] = [];
 
+  type StagedPost = { post: FeedPost; language: 'ja' | 'en' | 'other'; needsTranslation: boolean };
+  const staged: StagedPost[] = [];
+
+  // Pass 1: filter, dedup, language detection
   for (const post of posts.sort((a, b) => +new Date(a.publishedAt) - +new Date(b.publishedAt))) {
     if (config.skipRetweets && looksLikeRetweet(post.content)) continue;
     if (config.skipReplies && looksLikeReply(post.content)) continue;
@@ -19,18 +22,21 @@ export async function processPosts(
     seen.add(normalized);
 
     const language = detectLanguage(post.content);
-    const translatedText = config.enableTranslation && language === 'en'
-      ? await gemini.translate(post.content)
-      : post.content;
-
-    accepted.push({
-      ...post,
-      translatedText,
-      language
-    });
+    staged.push({ post, language, needsTranslation: config.enableTranslation && language === 'en' });
   }
 
-  return accepted;
+  // Pass 2: batch translate all English posts in one shot
+  const englishTexts = staged.filter(s => s.needsTranslation).map(s => s.post.content);
+  const translations = englishTexts.length > 0
+    ? await gemini.translateBatch(englishTexts, config.translateBatchSize)
+    : [];
+
+  let transIdx = 0;
+  return staged.map(({ post, language, needsTranslation }) => ({
+    ...post,
+    language,
+    translatedText: needsTranslation ? translations[transIdx++] : post.content
+  }));
 }
 
 export async function buildDigest(

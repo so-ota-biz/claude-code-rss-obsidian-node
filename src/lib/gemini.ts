@@ -10,6 +10,47 @@ export class GeminiClient {
     private readonly timeoutMs: number
   ) {}
 
+  async translateBatch(texts: string[], batchSize: number): Promise<string[]> {
+    if (texts.length === 0) return [];
+
+    const results: string[] = [];
+
+    for (let i = 0; i < texts.length; i += batchSize) {
+      const chunk = texts.slice(i, i + batchSize);
+      const numbered = chunk.map((text, idx) => `${idx + 1}. ${text}`).join('\n\n');
+
+      const prompt = [
+        `Translate the following ${chunk.length} X post(s) into natural Japanese.`,
+        'Rules:',
+        '- Keep product names, command names, and code as-is when appropriate.',
+        '- Preserve bullets and line breaks when practical.',
+        '- Do not add commentary.',
+        `- Return a JSON array of exactly ${chunk.length} string(s), one translation per post, in the same order.`,
+        '',
+        numbered
+      ].join('\n');
+
+      const raw = await this.generateText(prompt, 0.2, 'application/json');
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(`translateBatch: invalid JSON response: ${raw.slice(0, 100)}`);
+      }
+
+      if (!Array.isArray(parsed) || parsed.length !== chunk.length) {
+        throw new Error(
+          `translateBatch: expected array of length ${chunk.length}, got ${Array.isArray(parsed) ? parsed.length : typeof parsed}`
+        );
+      }
+
+      results.push(...(parsed as string[]));
+    }
+
+    return results;
+  }
+
   async translate(text: string): Promise<string> {
     const prompt = [
       'Translate the following X post into natural Japanese.',
