@@ -8,7 +8,11 @@ export class LocalStorage implements StorageProvider {
   async writeFile(filePath: string, content: string | Buffer): Promise<void> {
     const fullPath = path.resolve(this.vaultRoot, filePath);
     await this.ensureDir(path.dirname(fullPath));
-    await writeFile(fullPath, content, 'utf8');
+    if (Buffer.isBuffer(content)) {
+      await writeFile(fullPath, content);
+    } else {
+      await writeFile(fullPath, content, 'utf8');
+    }
   }
 
   async readFile(filePath: string): Promise<string> {

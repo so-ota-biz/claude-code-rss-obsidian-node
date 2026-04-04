@@ -6,7 +6,7 @@ Dropbox API ストレージを使って生成したダイジェストを Obsidia
 
 Dropbox 内に Obsidian Vault 専用のフォルダを用意し、`DROPBOX_BASE_PATH` でそのルートを指定します。
 
-```
+```text
 Dropbox/
 └── ObsidianVault/                  ← DROPBOX_BASE_PATH=/ObsidianVault
     └── AI Digest/

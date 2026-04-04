@@ -26,7 +26,7 @@ const schema = z.object({
   MAX_HIGHLIGHTS: z.coerce.number().int().positive().default(5),
   THUMBNAIL_IMAGE_EXT: z.string().default('png'),
   MODEL_TEXT: z.string().default('gemini-2.5-flash-lite'),
-  MODEL_IMAGE: z.string().default('gemini-2.5-flash-image'),
+  MODEL_IMAGE: z.string().min(1).default('gemini-2.5-flash-image'),
   THUMBNAIL_PROMPT_STYLE: z.string().default('clean, modern, editorial, dark, subtle terminal motif, no text'),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   TRANSLATE_BATCH_SIZE: z.coerce.number().int().positive().default(10),
