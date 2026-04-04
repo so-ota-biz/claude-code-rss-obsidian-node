@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadConfig } from '../config.js';
-import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, readFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const REQUIRED_ENV = {
@@ -10,6 +10,7 @@ const REQUIRED_ENV = {
 };
 
 let savedEnv: Record<string, string | undefined> = {};
+let originalConfigContent: string | null = null;
 const TEST_CONFIG_DIR = join(process.cwd(), 'config');
 const TEST_CONFIG_FILE = join(TEST_CONFIG_DIR, 'accounts.yml');
 
@@ -37,6 +38,14 @@ function removeTestConfigFile() {
   }
 }
 
+function restoreConfigFile() {
+  if (originalConfigContent !== null) {
+    writeFileSync(TEST_CONFIG_FILE, originalConfigContent, 'utf-8');
+  } else if (existsSync(TEST_CONFIG_FILE)) {
+    unlinkSync(TEST_CONFIG_FILE);
+  }
+}
+
 const DEFAULT_ACCOUNTS_YML = `
 accounts:
   - name: "anthropicai"
@@ -49,6 +58,10 @@ accounts:
 
 beforeEach(() => {
   savedEnv = {};
+  // Save original accounts.yml content (if any) so afterEach can restore it
+  originalConfigContent = existsSync(TEST_CONFIG_FILE)
+    ? readFileSync(TEST_CONFIG_FILE, 'utf-8')
+    : null;
   // Remove dotenv-loaded vars to avoid test pollution
   const allEnvKeys = [
     ...Object.keys(REQUIRED_ENV),
@@ -72,8 +85,8 @@ afterEach(() => {
       process.env[key] = value;
     }
   }
-  // Clean up test config file
-  removeTestConfigFile();
+  // Restore original accounts.yml (or delete if it didn't exist before)
+  restoreConfigFile();
 });
 
 describe('loadConfig', () => {
