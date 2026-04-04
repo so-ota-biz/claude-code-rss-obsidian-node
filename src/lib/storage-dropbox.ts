@@ -54,12 +54,11 @@ export class DropboxStorage implements StorageProvider {
   }
 
   async writeFile(filePath: string, content: string | Buffer): Promise<void> {
+    const normalizedPath = this.normalizePath(filePath);
     await this.executeWithRetry(async () => {
-      const path = this.normalizePath(filePath);
       const fileContent = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
-      
       await this.dropbox.filesUpload({
-        path,
+        path: normalizedPath,
         contents: fileContent,
         mode: { '.tag': 'overwrite' },
       });
@@ -67,9 +66,9 @@ export class DropboxStorage implements StorageProvider {
   }
 
   async readFile(filePath: string): Promise<string> {
+    const normalizedPath = this.normalizePath(filePath);
     return await this.executeWithRetry(async () => {
-      const path = this.normalizePath(filePath);
-      const response = await this.dropbox.filesDownload({ path });
+      const response = await this.dropbox.filesDownload({ path: normalizedPath });
       
       if ('fileBinary' in response.result && response.result.fileBinary instanceof Buffer) {
         return response.result.fileBinary.toString('utf8');
@@ -85,10 +84,10 @@ export class DropboxStorage implements StorageProvider {
   }
 
   async exists(filePath: string): Promise<boolean> {
+    const normalizedPath = this.normalizePath(filePath);
     try {
       return await this.executeWithRetry(async () => {
-        const path = this.normalizePath(filePath);
-        await this.dropbox.filesGetMetadata({ path });
+        await this.dropbox.filesGetMetadata({ path: normalizedPath });
         return true;
       }, 'check file existence in Dropbox');
     } catch {
