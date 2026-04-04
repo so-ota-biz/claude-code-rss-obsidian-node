@@ -28,6 +28,7 @@ describe('createStorageProvider', () => {
       assetsSubdir: 'assets',
       stateDir: '.state',
       maxPostsPerAccount: 20,
+      lookbackDays: 1,
       onlyIncludeOriginalPosts: true,
       skipRetweets: true,
       skipReplies: true,

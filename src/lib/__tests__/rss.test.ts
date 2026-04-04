@@ -27,6 +27,7 @@ const baseConfig: AppConfig = {
   assetsSubdir: 'AI Digest/Claude Code/assets',
   stateDir: '.state',
   maxPostsPerAccount: 20,
+  lookbackDays: 1,
   onlyIncludeOriginalPosts: true,
   skipRetweets: true,
   skipReplies: true,
@@ -37,7 +38,8 @@ const baseConfig: AppConfig = {
   thumbnailImageExt: 'png',
   modelText: 'gemini-2.5-flash-lite',
   thumbnailPromptStyle: 'clean, modern',
-  requestTimeoutMs: 30000
+  requestTimeoutMs: 30000,
+  storageType: 'local'
 };
 
 const range = {
