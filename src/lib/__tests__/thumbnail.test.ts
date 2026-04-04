@@ -1,18 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AppConfig, DailyDigest } from '../../types.js';
+import type { GeminiClient } from '../gemini.js';
 import { LocalStorage } from '../storage-local.js';
-
-// Mock child_process before importing thumbnail
-vi.mock('node:child_process', () => ({
-  spawn: vi.fn()
-}));
-
 import { maybeGenerateThumbnail } from '../thumbnail.js';
-import { spawn } from 'node:child_process';
-import { EventEmitter } from 'node:events';
 
 const baseConfig: AppConfig = {
   geminiApiKey: 'key',
@@ -34,9 +27,9 @@ const baseConfig: AppConfig = {
   enableDigest: true,
   enableThumbnail: true,
   maxHighlights: 5,
-  thumbnailCommand: 'echo {promptFile} {outputPath}',
   thumbnailImageExt: 'png',
   modelText: 'gemini-2.5-flash-lite',
+  modelImage: 'gemini-2.5-flash-image',
   thumbnailPromptStyle: 'clean, modern',
   requestTimeoutMs: 30000,
   translateBatchSize: 10,
@@ -50,29 +43,27 @@ const sampleDigest: DailyDigest = {
   notableAccounts: ['user1']
 };
 
-// Mocks spawn and writes a dummy output file at args[1] when exit code is 0,
-// so that readFile(tempOutputPath) succeeds in the implementation.
-function makeSpawnMock(exitCode: number) {
-  vi.mocked(spawn).mockImplementation((_cmd, args) => {
-    const emitter = new EventEmitter();
-    setImmediate(async () => {
-      if (exitCode === 0 && Array.isArray(args) && args[1]) {
-        try { await writeFile(args[1] as string, Buffer.from('dummy-image')); } catch {}
-      }
-      emitter.emit('exit', exitCode);
-    });
-    return emitter as ReturnType<typeof spawn>;
-  });
+const DUMMY_IMAGE = Buffer.from('dummy-image-data');
+
+function makeMockGemini(overrides: Partial<GeminiClient> = {}): GeminiClient {
+  return {
+    generateImage: vi.fn().mockResolvedValue(DUMMY_IMAGE),
+    translate: vi.fn(),
+    translateBatch: vi.fn(),
+    buildDigest: vi.fn(),
+    ...overrides
+  } as unknown as GeminiClient;
 }
 
 let vaultRoot: string;
 let storage: LocalStorage;
+let gemini: GeminiClient;
 
 beforeEach(async () => {
   vaultRoot = path.join(tmpdir(), `vitest-thumb-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(vaultRoot, { recursive: true });
   storage = new LocalStorage('/');
-  vi.clearAllMocks();
+  gemini = makeMockGemini();
 });
 
 afterEach(async () => {
@@ -81,72 +72,45 @@ afterEach(async () => {
 
 describe('maybeGenerateThumbnail', () => {
   it('returns undefined when enableThumbnail is false', async () => {
-    const config = { ...baseConfig, enableThumbnail: false, obsidianVaultPath: vaultRoot };
-    const result = await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
+    const config = { ...baseConfig, enableThumbnail: false };
+    const result = await maybeGenerateThumbnail(config, gemini, storage, sampleDigest, '2026-03-15', vaultRoot);
     expect(result).toBeUndefined();
-    expect(spawn).not.toHaveBeenCalled();
+    expect(gemini.generateImage).not.toHaveBeenCalled();
   });
 
-  it('returns undefined when thumbnailCommand is not set', async () => {
-    const config = { ...baseConfig, thumbnailCommand: undefined, obsidianVaultPath: vaultRoot };
-    const result = await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
-    expect(result).toBeUndefined();
-    expect(spawn).not.toHaveBeenCalled();
+  it('returns relative path on successful image generation', async () => {
+    const result = await maybeGenerateThumbnail(baseConfig, gemini, storage, sampleDigest, '2026-03-15', vaultRoot);
+    expect(result).toBe(`${baseConfig.assetsSubdir}/2026-03-15.png`);
+    expect(gemini.generateImage).toHaveBeenCalledOnce();
   });
 
-  it('returns relative path on successful spawn (exit code 0)', async () => {
-    makeSpawnMock(0);
-    const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
-    const result = await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
-    expect(result).toBe(`${config.assetsSubdir}/2026-03-15.png`);
-    expect(spawn).toHaveBeenCalledOnce();
+  it('passes a prompt containing the digest headline to generateImage', async () => {
+    await maybeGenerateThumbnail(baseConfig, gemini, storage, sampleDigest, '2026-03-15', vaultRoot);
+    const [prompt] = (gemini.generateImage as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(prompt).toContain('H1');
+    expect(prompt).toContain(baseConfig.thumbnailPromptStyle);
   });
 
-  it('throws when spawn exits with non-zero code', async () => {
-    makeSpawnMock(1);
-    const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
-    await expect(
-      maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot)
-    ).rejects.toThrow('exit code 1');
-  });
-
-  it('passes substituted promptFile and outputPath to spawn args', async () => {
-    makeSpawnMock(0);
-    const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
-    await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
-
-    expect(spawn).toHaveBeenCalledOnce();
-    const [cmd, args] = vi.mocked(spawn).mock.calls[0];
-    expect(cmd).toBe('echo');
-    expect(args[0]).toContain('2026-03-15.thumbnail-prompt.txt');
-    expect(args[1]).toContain('2026-03-15.png');
-  });
-
-  it('passes local temp paths (under tmpdir) to CLI, not vault paths', async () => {
-    makeSpawnMock(0);
-    const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
-    await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
-
-    const [, args] = vi.mocked(spawn).mock.calls[0];
-    // Both promptFile and outputPath should be under the OS tmpdir, not the vault
-    expect(args[0] as string).toContain(tmpdir());
-    expect(args[1] as string).toContain(tmpdir());
-  });
-
-  it('uploads the generated image via storage.writeFile', async () => {
-    makeSpawnMock(0);
+  it('writes the image buffer to storage at the assets path', async () => {
     const mockStorage = {
       writeFile: vi.fn().mockResolvedValue(undefined),
       readFile: vi.fn(),
       ensureDir: vi.fn().mockResolvedValue(undefined),
       exists: vi.fn()
     };
-    const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
-    await maybeGenerateThumbnail(config, mockStorage, sampleDigest, '2026-03-15', vaultRoot);
-
+    await maybeGenerateThumbnail(baseConfig, gemini, mockStorage, sampleDigest, '2026-03-15', vaultRoot);
     expect(mockStorage.writeFile).toHaveBeenCalledOnce();
-    const [storagePath, content] = mockStorage.writeFile.mock.calls[0];
-    expect(storagePath).toContain('2026-03-15.png');
-    expect(Buffer.isBuffer(content)).toBe(true);
+    const [filePath, content] = mockStorage.writeFile.mock.calls[0];
+    expect(filePath).toContain('2026-03-15.png');
+    expect(content).toEqual(DUMMY_IMAGE);
+  });
+
+  it('throws when generateImage throws', async () => {
+    const failingGemini = makeMockGemini({
+      generateImage: vi.fn().mockRejectedValue(new Error('Gemini image API error 500'))
+    });
+    await expect(
+      maybeGenerateThumbnail(baseConfig, failingGemini, storage, sampleDigest, '2026-03-15', vaultRoot)
+    ).rejects.toThrow('Gemini image API error 500');
   });
 });

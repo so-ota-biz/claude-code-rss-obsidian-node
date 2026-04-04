@@ -7,7 +7,8 @@ export class GeminiClient {
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
-    private readonly timeoutMs: number
+    private readonly timeoutMs: number,
+    private readonly imageModel: string = 'gemini-2.5-flash-image'
   ) {}
 
   async translateBatch(texts: string[], batchSize: number): Promise<string[]> {
@@ -49,6 +50,44 @@ export class GeminiClient {
     }
 
     return results;
+  }
+
+  async generateImage(prompt: string): Promise<Buffer> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      console.log(`[info] Gemini image API request (model: ${this.imageModel})`);
+      const response = await fetch(`${API_BASE}/${this.imageModel}:generateContent?key=${this.apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ['IMAGE'] }
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Gemini image API error ${response.status}: ${body}`);
+      }
+
+      const data = (await response.json()) as {
+        candidates?: Array<{
+          content?: {
+            parts?: Array<{ inlineData?: { mimeType: string; data: string } }>
+          }
+        }>
+      };
+
+      const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+      if (!imagePart?.inlineData) throw new Error('Gemini image API returned no image data');
+
+      return Buffer.from(imagePart.inlineData.data, 'base64');
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async translate(text: string): Promise<string> {
