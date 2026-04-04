@@ -1,9 +1,9 @@
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import type { AppConfig, DailyDigest } from '../types.js';
 import type { StorageProvider } from './storage.js';
-import { ensureDir } from './fs.js';
 
 export async function maybeGenerateThumbnail(
   config: AppConfig,
@@ -14,17 +14,32 @@ export async function maybeGenerateThumbnail(
 ): Promise<string | undefined> {
   if (!config.enableThumbnail || !config.thumbnailCommand) return undefined;
 
-  const assetsDir = path.join(vaultRoot, config.assetsSubdir);
-  await storage.ensureDir(assetsDir);
+  const tempDir = await mkdtemp(path.join(tmpdir(), 'rss-thumb-'));
+  try {
+    const tempPromptFile = path.join(tempDir, `${day}.thumbnail-prompt.txt`);
+    const tempOutputPath = path.join(tempDir, `${day}.${config.thumbnailImageExt}`);
+    const prompt = buildPrompt(config, digest);
 
-  const promptFile = path.join(assetsDir, `${day}.thumbnail-prompt.txt`);
-  const outputPath = path.join(assetsDir, `${day}.${config.thumbnailImageExt}`);
-  const prompt = buildPrompt(config, digest);
+    // Write prompt to local temp file so the CLI can always read it
+    await writeFile(tempPromptFile, prompt, 'utf8');
 
-  await storage.writeFile(promptFile, prompt);
+    // Run the external CLI with local temp paths
+    await exec(config.thumbnailCommand, path.resolve(vaultRoot), {
+      promptFile: tempPromptFile,
+      outputPath: tempOutputPath
+    });
 
-  await exec(config.thumbnailCommand, path.resolve(vaultRoot), { promptFile, outputPath });
-  return path.relative(vaultRoot, outputPath).replace(/\\/g, '/');
+    // Read the generated image and upload via storage (local vault or Dropbox)
+    const imageBuffer = await readFile(tempOutputPath);
+    const storageAssetsDir = path.join(vaultRoot, config.assetsSubdir);
+    const storageOutputPath = path.join(storageAssetsDir, `${day}.${config.thumbnailImageExt}`);
+    await storage.ensureDir(storageAssetsDir);
+    await storage.writeFile(storageOutputPath, imageBuffer);
+
+    return path.join(config.assetsSubdir, `${day}.${config.thumbnailImageExt}`).replace(/\\/g, '/');
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 function buildPrompt(config: AppConfig, digest: DailyDigest): string {

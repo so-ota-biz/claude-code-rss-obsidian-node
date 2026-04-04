@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AppConfig, DailyDigest } from '../../types.js';
@@ -39,6 +39,7 @@ const baseConfig: AppConfig = {
   modelText: 'gemini-2.5-flash-lite',
   thumbnailPromptStyle: 'clean, modern',
   requestTimeoutMs: 30000,
+  translateBatchSize: 10,
   storageType: 'local'
 };
 
@@ -49,10 +50,17 @@ const sampleDigest: DailyDigest = {
   notableAccounts: ['user1']
 };
 
+// Mocks spawn and writes a dummy output file at args[1] when exit code is 0,
+// so that readFile(tempOutputPath) succeeds in the implementation.
 function makeSpawnMock(exitCode: number) {
-  vi.mocked(spawn).mockImplementation(() => {
+  vi.mocked(spawn).mockImplementation((_cmd, args) => {
     const emitter = new EventEmitter();
-    setImmediate(() => emitter.emit('exit', exitCode));
+    setImmediate(async () => {
+      if (exitCode === 0 && Array.isArray(args) && args[1]) {
+        try { await writeFile(args[1] as string, Buffer.from('dummy-image')); } catch {}
+      }
+      emitter.emit('exit', exitCode);
+    });
     return emitter as ReturnType<typeof spawn>;
   });
 }
@@ -112,5 +120,33 @@ describe('maybeGenerateThumbnail', () => {
     expect(cmd).toBe('echo');
     expect(args[0]).toContain('2026-03-15.thumbnail-prompt.txt');
     expect(args[1]).toContain('2026-03-15.png');
+  });
+
+  it('passes local temp paths (under tmpdir) to CLI, not vault paths', async () => {
+    makeSpawnMock(0);
+    const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
+    await maybeGenerateThumbnail(config, storage, sampleDigest, '2026-03-15', vaultRoot);
+
+    const [, args] = vi.mocked(spawn).mock.calls[0];
+    // Both promptFile and outputPath should be under the OS tmpdir, not the vault
+    expect(args[0] as string).toContain(tmpdir());
+    expect(args[1] as string).toContain(tmpdir());
+  });
+
+  it('uploads the generated image via storage.writeFile', async () => {
+    makeSpawnMock(0);
+    const mockStorage = {
+      writeFile: vi.fn().mockResolvedValue(undefined),
+      readFile: vi.fn(),
+      ensureDir: vi.fn().mockResolvedValue(undefined),
+      exists: vi.fn()
+    };
+    const config = { ...baseConfig, obsidianVaultPath: vaultRoot };
+    await maybeGenerateThumbnail(config, mockStorage, sampleDigest, '2026-03-15', vaultRoot);
+
+    expect(mockStorage.writeFile).toHaveBeenCalledOnce();
+    const [storagePath, content] = mockStorage.writeFile.mock.calls[0];
+    expect(storagePath).toContain('2026-03-15.png');
+    expect(Buffer.isBuffer(content)).toBe(true);
   });
 });
