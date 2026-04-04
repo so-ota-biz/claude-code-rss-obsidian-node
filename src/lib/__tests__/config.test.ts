@@ -67,7 +67,8 @@ beforeEach(() => {
     ...Object.keys(REQUIRED_ENV),
     'STORAGE_TYPE', 'DROPBOX_ACCESS_TOKEN', 'DROPBOX_CLIENT_ID', 'DROPBOX_CLIENT_SECRET',
     'DROPBOX_REFRESH_TOKEN', 'DROPBOX_TOKEN_STORAGE_PATH', 'DROPBOX_BASE_PATH',
-    'LOOKBACK_DAYS'
+    'LOOKBACK_DAYS',
+    'TRANSLATE_BATCH_SIZE'
   ];
   for (const key of allEnvKeys) {
     savedEnv[key] = process.env[key];
@@ -175,6 +176,7 @@ accounts:
       expect(config.storageType).toBe('local');
       expect(config.dropboxBasePath).toBe('/');
       expect(config.lookbackDays).toBe(1);
+      expect(config.translateBatchSize).toBe(10);
     });
 
     it('parses boolean env vars: "true" → true', () => {
@@ -200,6 +202,12 @@ accounts:
       setEnv({ ...REQUIRED_ENV, SKIP_REPLIES: '0' });
       const config = loadConfig();
       expect(config.skipReplies).toBe(false);
+    });
+
+    it('uses TRANSLATE_BATCH_SIZE from env when set', () => {
+      setEnv({ ...REQUIRED_ENV, TRANSLATE_BATCH_SIZE: '5' });
+      const config = loadConfig();
+      expect(config.translateBatchSize).toBe(5);
     });
 
     it('removes leading dot from THUMBNAIL_IMAGE_EXT', () => {
