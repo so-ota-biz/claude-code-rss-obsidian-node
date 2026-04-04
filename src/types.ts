@@ -50,9 +50,9 @@ export type AppConfig = {
   enableDigest: boolean;
   enableThumbnail: boolean;
   maxHighlights: number;
-  thumbnailCommand?: string;
   thumbnailImageExt: string;
   modelText: string;
+  modelImage: string;
   thumbnailPromptStyle: string;
   requestTimeoutMs: number;
   translateBatchSize: number;

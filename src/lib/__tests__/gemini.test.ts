@@ -92,6 +92,53 @@ describe('GeminiClient.translate', () => {
   });
 });
 
+describe('GeminiClient.generateImage', () => {
+  function makeImageResponse(base64Data: string): Response {
+    const responseBody = {
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }] } }]
+    };
+    return makeFetchResponse(responseBody);
+  }
+
+  it('returns a Buffer decoded from the base64 inlineData', async () => {
+    const imageData = Buffer.from('fake-image-bytes');
+    vi.mocked(fetch).mockResolvedValue(makeImageResponse(imageData.toString('base64')));
+
+    const client = makeClient();
+    const result = await client.generateImage('a prompt');
+    expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result).toEqual(imageData);
+  });
+
+  it('throws when response has no inlineData part', async () => {
+    const responseBody = {
+      candidates: [{ content: { parts: [{ text: 'some text only' }] } }]
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(responseBody));
+
+    const client = makeClient();
+    await expect(client.generateImage('a prompt')).rejects.toThrow('no image data');
+  });
+
+  it('throws on non-200 HTTP response', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ error: 'bad request' }, 400));
+
+    const client = makeClient();
+    await expect(client.generateImage('a prompt')).rejects.toThrow('Gemini image API error 400');
+  });
+
+  it('uses the imageModel passed to the constructor in the request URL', async () => {
+    const imageData = Buffer.from('img');
+    vi.mocked(fetch).mockResolvedValue(makeImageResponse(imageData.toString('base64')));
+
+    const client = new GeminiClient('key', 'gemini-2.5-flash-lite', 5000, 'gemini-3-pro-image-preview');
+    await client.generateImage('prompt');
+
+    const url = (vi.mocked(fetch).mock.calls[0][0] as string);
+    expect(url).toContain('gemini-3-pro-image-preview');
+  });
+});
+
 describe('GeminiClient.translateBatch', () => {
   function makeBatchResponse(translations: string[]): Response {
     const responseBody = {

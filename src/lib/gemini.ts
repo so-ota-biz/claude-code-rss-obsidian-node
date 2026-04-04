@@ -7,7 +7,8 @@ export class GeminiClient {
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
-    private readonly timeoutMs: number
+    private readonly timeoutMs: number,
+    private readonly imageModel: string = 'gemini-2.5-flash-image'
   ) {}
 
   async translateBatch(texts: string[], batchSize: number): Promise<string[]> {
@@ -49,6 +50,71 @@ export class GeminiClient {
     }
 
     return results;
+  }
+
+  async generateImage(prompt: string): Promise<Buffer> {
+    const maxRetries = 3;
+    const baseDelay = 5000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      try {
+        console.log(`[info] Gemini image API request (attempt ${attempt}/${maxRetries}, model: ${this.imageModel})`);
+        const response = await fetch(`${API_BASE}/${this.imageModel}:generateContent?key=${this.apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseModalities: ['IMAGE'] }
+          }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          const isRetryable = this.isRetryableError(response.status, body);
+          if (isRetryable && attempt < maxRetries) {
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            console.log(`[warn] Gemini image API error ${response.status} (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+            await this.sleep(delay);
+            continue;
+          }
+          throw new Error(`Gemini image API error ${response.status}: ${body}`);
+        }
+
+        const data = (await response.json()) as {
+          candidates?: Array<{
+            content?: {
+              parts?: Array<{ inlineData?: { mimeType: string; data: string } }>
+            }
+          }>
+        };
+
+        const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (!imagePart?.inlineData) throw new Error('Gemini image API returned no image data');
+
+        return Buffer.from(imagePart.inlineData.data, 'base64');
+      } catch (error) {
+        clearTimeout(timeout);
+
+        if (attempt === maxRetries) throw error;
+
+        if (this.isRetryableErrorFromException(error)) {
+          const delay = baseDelay * Math.pow(2, attempt - 1);
+          console.log(`[warn] Gemini image API error (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`, error instanceof Error ? error.message : error);
+          await this.sleep(delay);
+          continue;
+        }
+
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    throw new Error('All retry attempts failed');
   }
 
   async translate(text: string): Promise<string> {

@@ -68,7 +68,8 @@ beforeEach(() => {
     'STORAGE_TYPE', 'DROPBOX_ACCESS_TOKEN', 'DROPBOX_CLIENT_ID', 'DROPBOX_CLIENT_SECRET',
     'DROPBOX_REFRESH_TOKEN', 'DROPBOX_TOKEN_STORAGE_PATH', 'DROPBOX_BASE_PATH',
     'LOOKBACK_DAYS',
-    'TRANSLATE_BATCH_SIZE'
+    'TRANSLATE_BATCH_SIZE',
+    'MODEL_IMAGE'
   ];
   for (const key of allEnvKeys) {
     savedEnv[key] = process.env[key];
@@ -177,6 +178,7 @@ accounts:
       expect(config.dropboxBasePath).toBe('/');
       expect(config.lookbackDays).toBe(1);
       expect(config.translateBatchSize).toBe(10);
+      expect(config.modelImage).toBe('gemini-2.5-flash-image');
     });
 
     it('parses boolean env vars: "true" → true', () => {

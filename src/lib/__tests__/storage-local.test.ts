@@ -35,12 +35,22 @@ describe('LocalStorage', () => {
       expect(content).toBe('content');
     });
 
-    it('handles Buffer input', async () => {
+    it('handles Buffer input (utf8 text)', async () => {
       const buffer = Buffer.from('Binary content', 'utf8');
       await storage.writeFile('binary.txt', buffer);
-      
+
       const content = await storage.readFile('binary.txt');
       expect(content).toBe('Binary content');
+    });
+
+    it('preserves raw binary data (non-utf8 bytes) without corruption', async () => {
+      // PNG-like byte sequence containing bytes that would be mangled by utf8 encoding
+      const binaryData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe, 0x00]);
+      await storage.writeFile('image.png', binaryData);
+
+      const { readFile: fsReadFile } = await import('node:fs/promises');
+      const written = await fsReadFile(path.join(testVaultRoot, 'image.png'));
+      expect(written).toEqual(binaryData);
     });
   });
 

@@ -14,11 +14,14 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const storage = createStorageProvider(config);
   const range = getTargetDateRange(config.timezone, config.lookbackDays);
-  const stateDir = config.storageType === 'dropbox' 
+  const stateDir = config.storageType === 'dropbox'
     ? config.stateDir  // Dropboxの場合は相対パスのまま使用
     : path.resolve(config.stateDir);  // ローカルの場合は絶対パスに変換
+  // Dropboxの場合、vaultRootは空文字とし DROPBOX_BASE_PATH + OUTPUT_SUBDIR でパスが確定する
+  // ローカルの場合は OBSIDIAN_VAULT_PATH を使用する
+  const vaultRoot = config.storageType === 'dropbox' ? '' : config.obsidianVaultPath;
   const state = await readState(storage, stateDir);
-  const gemini = new GeminiClient(config.geminiApiKey, config.modelText, config.requestTimeoutMs);
+  const gemini = new GeminiClient(config.geminiApiKey, config.modelText, config.requestTimeoutMs, config.modelImage);
 
   console.log(`[info] Target day: ${range.day} (${range.startIso} .. ${range.endIso})`);
   console.log(`[info] Storage type: ${config.storageType}`);
@@ -35,7 +38,7 @@ async function main(): Promise<void> {
   console.log(`[info] Accepted posts after filtering: ${processed.length}`);
 
   const digest = await buildDigest(processed, config, gemini, range.day);
-  const thumbnailRelativePath = await maybeGenerateThumbnail(config, storage, digest, range.day, config.obsidianVaultPath)
+  const thumbnailRelativePath = await maybeGenerateThumbnail(config, gemini, storage, digest, range.day, vaultRoot)
     .catch((error) => {
       console.warn(`[warn] Thumbnail generation skipped: ${(error as Error).message}`);
       return undefined;
@@ -43,7 +46,7 @@ async function main(): Promise<void> {
 
   const digestPath = await writeDigestMarkdown({
     storage,
-    vaultRoot: config.obsidianVaultPath,
+    vaultRoot,
     outputSubdir: config.outputSubdir,
     day: range.day,
     digest,
@@ -52,7 +55,7 @@ async function main(): Promise<void> {
 
   const rawPath = await writeRawMarkdown({
     storage,
-    vaultRoot: config.obsidianVaultPath,
+    vaultRoot,
     rawSubdir: config.rawSubdir,
     day: range.day,
     posts: processed
