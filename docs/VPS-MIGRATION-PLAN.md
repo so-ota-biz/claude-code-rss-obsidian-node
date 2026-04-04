@@ -258,137 +258,94 @@ chmod 755 .state logs
 
 ### フェーズ4: 自動実行設定
 
-#### 4.1 cron 設定
+#### 4.1 deploy ユーザーへの sudo 権限付与
+
+`deploy` ユーザーはパスワードなしで作成されているため、このステップは **root セッションで実行する**。
+
 ```bash
-# crontab 編集
-crontab -e
-
-# 毎朝8:00に実行（JST = UTC+9、UTC 23:00）
-0 23 * * * cd /home/deploy/claude-code-rss && /usr/bin/npm run run >> /home/deploy/logs/claude-code-digest.log 2>&1
-
-# 週1回の再起動（日曜深夜）
-0 2 * * 0 cd /home/deploy/claude-code-rss && npm run rsshub:down && sleep 10 && npm run rsshub:up
+# root セッションで実行（deploy から exit して root に戻る）
+echo 'deploy ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/deploy
+chmod 440 /etc/sudoers.d/deploy
 ```
+
+以降の `sudo` コマンドはすべて deploy ユーザーのまま実行できる。
+
+> **nano について**: ローカル端末が Ghostty などの場合、`nano` がエラーになることがある。その場合は先頭に `TERM=xterm-256color` を付けて実行する（例: `TERM=xterm-256color sudo nano /etc/ssh/sshd_config`）。
 
 #### 4.2 ログローテーション設定
-```bash
-# logrotate 設定作成
-sudo vim /etc/logrotate.d/claude-code-digest
 
-# 内容:
-/home/deploy/logs/*.log {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 644 deploy deploy
-}
+スクリプトが `scripts/vps/install-logrotate.sh` として用意されている。
+
+```bash
+# deploy ユーザーで実行
+sudo bash scripts/vps/install-logrotate.sh
 ```
 
-### フェーズ5: 監視とバックアップ
+#### 4.3 Redis メモリ設定
 
-#### 5.1 基本監視スクリプト
+Redis 起動ログに `WARNING Memory overcommit must be enabled!` が出る場合は以下を実行する。
+
 ```bash
-# ~/scripts/health-check.sh
-#!/bin/bash
-
-LOG_FILE="/home/deploy/logs/health-check.log"
-DATE=$(date '+%Y-%m-%d %H:%M:%S')
-
-echo "[$DATE] Health check started" >> $LOG_FILE
-
-# RSSHub チェック  
-if curl -f -s http://localhost:1200/ > /dev/null; then
-    echo "[$DATE] RSSHub: OK" >> $LOG_FILE
-else
-    echo "[$DATE] RSSHub: ERROR" >> $LOG_FILE
-    # 再起動
-    cd /home/deploy/claude-code-rss
-    npm run rsshub:down && npm run rsshub:up
-fi
-
-# ディスク使用量チェック
-DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-if [ $DISK_USAGE -gt 80 ]; then
-    echo "[$DATE] Disk usage: WARNING ${DISK_USAGE}%" >> $LOG_FILE
-fi
+sudo sysctl vm.overcommit_memory=1
+echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
 ```
+
+### フェーズ5: 監視・バックアップ・自動実行
+
+監視スクリプト（`scripts/vps/health-check.sh`）とバックアップスクリプト（`scripts/vps/backup.sh`）はリポジトリに含まれている。`setup-cron.sh` を実行するとすべての cron ジョブ（バッチ実行・ヘルスチェック・バックアップ・週次再起動・週次 OS 更新）が一括設定される。
 
 ```bash
 # 実行権限付与
-chmod +x ~/scripts/health-check.sh
+chmod +x scripts/vps/health-check.sh scripts/vps/backup.sh scripts/vps/setup-cron.sh
 
-# cron に追加（30分間隔）
-*/30 * * * * /home/deploy/scripts/health-check.sh
+# cron 一括設定（すでに 4.1 で手動設定済みの場合も重複なく上書きされる）
+bash scripts/vps/setup-cron.sh
+
+# 設定確認
+crontab -l
 ```
 
-#### 5.2 バックアップスクリプト
-```bash
-# ~/scripts/backup.sh
-#!/bin/bash
+設定されるジョブ：
 
-BACKUP_DIR="/home/deploy/backups"
-DATE=$(date '+%Y%m%d')
-
-mkdir -p $BACKUP_DIR
-
-# 設定ファイル
-cp /home/deploy/claude-code-rss/.env $BACKUP_DIR/env-$DATE
-
-# Redis データ
-docker exec rsshub-redis redis-cli BGSAVE
-sleep 5
-docker cp rsshub-redis:/data/dump.rdb $BACKUP_DIR/redis-$DATE.rdb
-
-# 状態ファイル
-cp -r /home/deploy/claude-code-rss/.state $BACKUP_DIR/state-$DATE
-
-# 古いバックアップ削除（7日以上前）
-find $BACKUP_DIR -name "*" -mtime +7 -delete
-
-echo "Backup completed: $DATE"
-```
-
-```bash
-# cron に追加（毎日深夜2:00）
-0 2 * * * /home/deploy/scripts/backup.sh >> /home/deploy/logs/backup.log 2>&1
-```
+| ジョブ | スケジュール |
+|--------|-------------|
+| RSS バッチ実行 | 毎日 8:00 JST (23:00 UTC) |
+| ヘルスチェック | 30 分間隔 |
+| バックアップ | 毎日 2:00 JST (17:00 UTC) |
+| RSSHub 週次再起動 | 毎週日曜 2:00 JST |
+| OS 週次更新 | 毎週日曜 3:00 JST |
 
 ## セキュリティ設定
 
-### ファイアウォール
-```bash
-# UFW 状態確認
-sudo ufw status
+### ファイアウォール確認
 
-# 必要最小限のポートのみ開放
-sudo ufw allow ssh      # 22
-# RSSHub は原則内部利用。外部公開が必要な場合のみ開放
-# sudo ufw allow 1200/tcp
+```bash
+sudo ufw status
+# SSH (22) が ALLOW になっていることを確認
+# RSSHub (1200) は原則内部利用のため開放不要
 ```
 
 ### SSH セキュリティ強化
-```bash
-# /etc/ssh/sshd_config 編集
-sudo vim /etc/ssh/sshd_config
 
-# 設定項目:
+```bash
+TERM=xterm-256color sudo nano /etc/ssh/sshd_config
+```
+
+以下の項目を設定する：
+
+```
 PasswordAuthentication no
 PermitRootLogin no
 PubkeyAuthentication yes
-Port 22  # または非標準ポート
+```
 
-# SSH 再起動
+編集後、SSH を再起動する：
+
+```bash
 sudo systemctl restart ssh
 ```
 
-### 定期的なセキュリティ更新
-```bash
-# cron に追加（週1回、日曜深夜）
-0 3 * * 0 sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >> /home/deploy/logs/system-update.log 2>&1
-```
+> **注意**: 再起動前に別のターミナルから SSH 接続できることを確認してから既存セッションを閉じること。設定ミスでロックアウトされるリスクを避けるため。
 
 ## 移行時の注意点
 
