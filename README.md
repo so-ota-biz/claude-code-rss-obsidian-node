@@ -75,8 +75,35 @@ npm run run
 GEMINI_API_KEY=...
 RSSHUB_BASE_URL=http://localhost:1200
 OBSIDIAN_VAULT_PATH=/absolute/path/to/ObsidianVault
-TARGET_ACCOUNTS=anthropicai,claudeai
 ```
+
+## 収集対象アカウントの管理
+
+収集対象アカウントは `config/accounts.yml` で管理します。
+
+```yaml
+accounts:
+  - name: "anthropicai"
+    description: "Anthropic official account"
+    category: "AI Company"
+  - name: "claudeai"
+    description: "Claude AI official account"
+    category: "AI Product"
+```
+
+### アカウントを追加する
+
+`config/accounts.yml` に以下の形式でエントリを追加してください。
+
+```yaml
+  - name: "追加したいアカウント名"
+    description: "説明（任意）"
+    category: "カテゴリ（任意）"
+```
+
+### アカウントを削除する
+
+`config/accounts.yml` から該当のエントリを削除してください。
 
 ## ストレージ設定
 

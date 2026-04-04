@@ -1,16 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadConfig } from '../config.js';
-import { writeFileSync, unlinkSync, mkdirSync, rmSync, existsSync } from 'fs';
+import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const REQUIRED_ENV_WITH_ACCOUNTS = {
-  GEMINI_API_KEY: 'test-api-key',
-  RSSHUB_BASE_URL: 'http://localhost:1200',
-  OBSIDIAN_VAULT_PATH: '/tmp/vault',
-  TARGET_ACCOUNTS: 'anthropicai,claudeai'
-};
-
-const REQUIRED_ENV_WITHOUT_ACCOUNTS = {
+const REQUIRED_ENV = {
   GEMINI_API_KEY: 'test-api-key',
   RSSHUB_BASE_URL: 'http://localhost:1200',
   OBSIDIAN_VAULT_PATH: '/tmp/vault'
@@ -44,12 +37,21 @@ function removeTestConfigFile() {
   }
 }
 
+const DEFAULT_ACCOUNTS_YML = `
+accounts:
+  - name: "anthropicai"
+    description: "Anthropic official account"
+    category: "AI Company"
+  - name: "claudeai"
+    description: "Claude AI official account"
+    category: "AI Product"
+`;
+
 beforeEach(() => {
   savedEnv = {};
   // Remove dotenv-loaded vars to avoid test pollution
   const allEnvKeys = [
-    ...Object.keys(REQUIRED_ENV_WITH_ACCOUNTS), 
-    ...Object.keys(REQUIRED_ENV_WITHOUT_ACCOUNTS),
+    ...Object.keys(REQUIRED_ENV),
     'STORAGE_TYPE', 'DROPBOX_ACCESS_TOKEN', 'DROPBOX_CLIENT_ID', 'DROPBOX_CLIENT_SECRET',
     'DROPBOX_REFRESH_TOKEN', 'DROPBOX_TOKEN_STORAGE_PATH', 'DROPBOX_BASE_PATH',
     'LOOKBACK_DAYS'
@@ -58,8 +60,8 @@ beforeEach(() => {
     savedEnv[key] = process.env[key];
     delete process.env[key];
   }
-  // Remove any existing test config file
-  removeTestConfigFile();
+  // Provide default accounts.yml so tests not focused on account loading always pass
+  createTestConfigFile(DEFAULT_ACCOUNTS_YML);
 });
 
 afterEach(() => {
@@ -75,25 +77,19 @@ afterEach(() => {
 });
 
 describe('loadConfig', () => {
-  describe('Environment variable configuration', () => {
+  describe('Basic configuration', () => {
     it('returns AppConfig when all required env vars are set', () => {
-      setEnv(REQUIRED_ENV_WITH_ACCOUNTS);
+      setEnv(REQUIRED_ENV);
       const config = loadConfig();
       expect(config.geminiApiKey).toBe('test-api-key');
       expect(config.rsshubBaseUrl).toBe('http://localhost:1200');
       expect(config.obsidianVaultPath).toBe('/tmp/vault');
       expect(config.targetAccounts).toEqual(['anthropicai', 'claudeai']);
     });
-
-    it('splits TARGET_ACCOUNTS by comma and trims whitespace', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, TARGET_ACCOUNTS: ' user1 , user2 , user3 ' });
-      const config = loadConfig();
-      expect(config.targetAccounts).toEqual(['user1', 'user2', 'user3']);
-    });
   });
 
   describe('YAML configuration file', () => {
-    it('loads accounts from YAML file when TARGET_ACCOUNTS is not set', () => {
+    it('loads accounts from YAML file', () => {
       createTestConfigFile(`
 accounts:
   - name: "user1"
@@ -103,20 +99,9 @@ accounts:
     description: "User 2"
     category: "Test"
 `);
-      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      setEnv(REQUIRED_ENV);
       const config = loadConfig();
       expect(config.targetAccounts).toEqual(['user1', 'user2']);
-    });
-
-    it('prioritizes TARGET_ACCOUNTS environment variable over YAML file', () => {
-      createTestConfigFile(`
-accounts:
-  - name: "yaml_user1"
-  - name: "yaml_user2"
-`);
-      setEnv({ ...REQUIRED_ENV_WITHOUT_ACCOUNTS, TARGET_ACCOUNTS: 'env_user1,env_user2' });
-      const config = loadConfig();
-      expect(config.targetAccounts).toEqual(['env_user1', 'env_user2']);
     });
 
     it('filters out accounts with empty names from YAML', () => {
@@ -127,7 +112,7 @@ accounts:
   - name: "  "
   - name: "another_valid"
 `);
-      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      setEnv(REQUIRED_ENV);
       const config = loadConfig();
       expect(config.targetAccounts).toEqual(['valid_user', 'another_valid']);
     });
@@ -137,12 +122,13 @@ accounts:
 not_accounts:
   - name: "user1"
 `);
-      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      setEnv(REQUIRED_ENV);
       expect(() => loadConfig()).toThrow('Invalid config format: accounts must be an array');
     });
 
-    it('throws error when neither TARGET_ACCOUNTS nor YAML file is available', () => {
-      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+    it('throws error when YAML file is not available', () => {
+      removeTestConfigFile();
+      setEnv(REQUIRED_ENV);
       expect(() => loadConfig()).toThrow('No target accounts configured');
     });
 
@@ -152,20 +138,20 @@ accounts:
   - name: "user1
     invalid yaml syntax
 `);
-      setEnv(REQUIRED_ENV_WITHOUT_ACCOUNTS);
+      setEnv(REQUIRED_ENV);
       expect(() => loadConfig()).toThrow(/Failed to load accounts configuration/);
     });
   });
 
   describe('Other configuration options', () => {
     it('removes trailing slash from RSSHUB_BASE_URL', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, RSSHUB_BASE_URL: 'http://localhost:1200/' });
+      setEnv({ ...REQUIRED_ENV, RSSHUB_BASE_URL: 'http://localhost:1200/' });
       const config = loadConfig();
       expect(config.rsshubBaseUrl).toBe('http://localhost:1200');
     });
 
     it('applies default values including storage settings', () => {
-      setEnv(REQUIRED_ENV_WITH_ACCOUNTS);
+      setEnv(REQUIRED_ENV);
       const config = loadConfig();
       expect(config.timezone).toBe('Asia/Tokyo');
       expect(config.modelText).toBe('gemini-2.5-flash-lite');
@@ -179,39 +165,39 @@ accounts:
     });
 
     it('parses boolean env vars: "true" → true', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, ENABLE_TRANSLATION: 'true', SKIP_RETWEETS: 'true' });
+      setEnv({ ...REQUIRED_ENV, ENABLE_TRANSLATION: 'true', SKIP_RETWEETS: 'true' });
       const config = loadConfig();
       expect(config.enableTranslation).toBe(true);
       expect(config.skipRetweets).toBe(true);
     });
 
     it('parses boolean env vars: "1" → true', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, ENABLE_DIGEST: '1' });
+      setEnv({ ...REQUIRED_ENV, ENABLE_DIGEST: '1' });
       const config = loadConfig();
       expect(config.enableDigest).toBe(true);
     });
 
     it('parses boolean env vars: "false" → false', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, ENABLE_THUMBNAIL: 'false' });
+      setEnv({ ...REQUIRED_ENV, ENABLE_THUMBNAIL: 'false' });
       const config = loadConfig();
       expect(config.enableThumbnail).toBe(false);
     });
 
     it('parses boolean env vars: "0" → false', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, SKIP_REPLIES: '0' });
+      setEnv({ ...REQUIRED_ENV, SKIP_REPLIES: '0' });
       const config = loadConfig();
       expect(config.skipReplies).toBe(false);
     });
 
     it('removes leading dot from THUMBNAIL_IMAGE_EXT', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, THUMBNAIL_IMAGE_EXT: '.webp' });
+      setEnv({ ...REQUIRED_ENV, THUMBNAIL_IMAGE_EXT: '.webp' });
       const config = loadConfig();
       expect(config.thumbnailImageExt).toBe('webp');
     });
 
     it('configures dropbox storage when STORAGE_TYPE is dropbox', () => {
-      setEnv({ 
-        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+      setEnv({
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox',
         DROPBOX_ACCESS_TOKEN: 'test-token',
         DROPBOX_BASE_PATH: '/custom/path'
@@ -224,7 +210,7 @@ accounts:
 
     it('configures dropbox OAuth when CLIENT_ID and REFRESH_TOKEN are provided', () => {
       setEnv({
-        ...REQUIRED_ENV_WITH_ACCOUNTS,
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox',
         DROPBOX_CLIENT_ID: 'test-client-id',
         DROPBOX_CLIENT_SECRET: 'test-client-secret',
@@ -241,7 +227,7 @@ accounts:
 
     it('uses default token storage path when not specified', () => {
       setEnv({
-        ...REQUIRED_ENV_WITH_ACCOUNTS,
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox',
         DROPBOX_CLIENT_ID: 'test-client-id',
         DROPBOX_CLIENT_SECRET: 'test-client-secret',
@@ -253,7 +239,7 @@ accounts:
 
     it('allows OAuth config without REFRESH_TOKEN for first-time setup', () => {
       setEnv({
-        ...REQUIRED_ENV_WITH_ACCOUNTS,
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox',
         DROPBOX_CLIENT_ID: 'test-client-id',
         DROPBOX_CLIENT_SECRET: 'test-client-secret',
@@ -268,7 +254,7 @@ accounts:
 
     it('allows OAuth config with CLIENT_ID and CLIENT_SECRET only (uses default token storage path)', () => {
       setEnv({
-        ...REQUIRED_ENV_WITH_ACCOUNTS,
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox',
         DROPBOX_CLIENT_ID: 'test-client-id',
         DROPBOX_CLIENT_SECRET: 'test-client-secret'
@@ -284,28 +270,28 @@ accounts:
 
     it('warns when both access token and OAuth config are provided', () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      
+
       setEnv({
-        ...REQUIRED_ENV_WITH_ACCOUNTS,
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox',
         DROPBOX_ACCESS_TOKEN: 'legacy-token',
         DROPBOX_CLIENT_ID: 'test-client-id',
         DROPBOX_CLIENT_SECRET: 'test-client-secret',
         DROPBOX_REFRESH_TOKEN: 'test-refresh-token'
       });
-      
+
       const config = loadConfig();
       expect(config.storageType).toBe('dropbox');
       expect(consoleSpy).toHaveBeenCalledWith(
         '[warning] Both DROPBOX_ACCESS_TOKEN and OAuth configuration provided. OAuth configuration will take precedence.'
       );
-      
+
       consoleSpy.mockRestore();
     });
 
     it('throws error when STORAGE_TYPE is dropbox but no authentication is provided', () => {
-      setEnv({ 
-        ...REQUIRED_ENV_WITH_ACCOUNTS, 
+      setEnv({
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox'
       });
       expect(() => loadConfig()).toThrow(
@@ -315,7 +301,7 @@ accounts:
 
     it('accepts CLIENT_ID with token storage path but no refresh token', () => {
       setEnv({
-        ...REQUIRED_ENV_WITH_ACCOUNTS,
+        ...REQUIRED_ENV,
         STORAGE_TYPE: 'dropbox',
         DROPBOX_CLIENT_ID: 'test-client-id',
         DROPBOX_CLIENT_SECRET: 'test-client-secret',
@@ -332,17 +318,17 @@ accounts:
 
   describe('Error cases', () => {
     it('throws when GEMINI_API_KEY is empty', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, GEMINI_API_KEY: '' });
+      setEnv({ ...REQUIRED_ENV, GEMINI_API_KEY: '' });
       expect(() => loadConfig()).toThrow();
     });
 
     it('throws when RSSHUB_BASE_URL is not a valid URL', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, RSSHUB_BASE_URL: 'not-a-url' });
+      setEnv({ ...REQUIRED_ENV, RSSHUB_BASE_URL: 'not-a-url' });
       expect(() => loadConfig()).toThrow();
     });
 
     it('throws when GEMINI_API_KEY is missing', () => {
-      setEnv({ ...REQUIRED_ENV_WITH_ACCOUNTS, GEMINI_API_KEY: undefined });
+      setEnv({ ...REQUIRED_ENV, GEMINI_API_KEY: undefined });
       expect(() => loadConfig()).toThrow();
     });
   });

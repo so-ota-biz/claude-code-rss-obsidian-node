@@ -10,7 +10,6 @@ const schema = z.object({
   RSSHUB_BASE_URL: z.string().url(),
   RSSHUB_ROUTE_TEMPLATE: z.string().default('/twitter/user/:account'),
   OBSIDIAN_VAULT_PATH: z.string().min(1),
-  TARGET_ACCOUNTS: z.string().optional(), // オプションに変更（設定ファイルとの共存のため）
   TIMEZONE: z.string().default('Asia/Tokyo'),
   OUTPUT_SUBDIR: z.string().default('AI Digest/Claude Code'),
   RAW_SUBDIR: z.string().default('AI Digest/Claude Code/raw'),
@@ -67,21 +66,13 @@ function loadAccountsFromYaml(): string[] {
   }
 }
 
-// アカウント一覧を取得する関数（環境変数優先、設定ファイルフォールバック）
-function loadTargetAccounts(envValue?: string): string[] {
-  // 環境変数が設定されている場合は優先
-  if (envValue && envValue.trim()) {
-    return envValue.split(',').map((value) => value.trim()).filter(Boolean);
+// アカウント一覧を取得する関数
+function loadTargetAccounts(): string[] {
+  const accounts = loadAccountsFromYaml();
+  if (accounts.length > 0) {
+    return accounts;
   }
-  
-  // 設定ファイルからロード
-  const accountsFromFile = loadAccountsFromYaml();
-  if (accountsFromFile.length > 0) {
-    return accountsFromFile;
-  }
-  
-  // どちらも設定されていない場合はエラー
-  throw new Error('No target accounts configured. Please set TARGET_ACCOUNTS environment variable or create config/accounts.yml');
+  throw new Error('No target accounts configured. Please create config/accounts.yml');
 }
 
 export function loadConfig(): AppConfig {
@@ -108,7 +99,7 @@ export function loadConfig(): AppConfig {
     rsshubBaseUrl: env.RSSHUB_BASE_URL.replace(/\/$/, ''),
     rsshubRouteTemplate: env.RSSHUB_ROUTE_TEMPLATE,
     obsidianVaultPath: env.OBSIDIAN_VAULT_PATH,
-    targetAccounts: loadTargetAccounts(env.TARGET_ACCOUNTS),
+    targetAccounts: loadTargetAccounts(),
     timezone: env.TIMEZONE,
     outputSubdir: env.OUTPUT_SUBDIR,
     rawSubdir: env.RAW_SUBDIR,
