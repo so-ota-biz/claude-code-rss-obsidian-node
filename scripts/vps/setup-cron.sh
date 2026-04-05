@@ -11,6 +11,9 @@ LOG_DIR="/home/deploy/logs"
 
 echo "=== cron ジョブ設定開始 ==="
 
+# ログディレクトリ作成
+mkdir -p "$LOG_DIR"
+
 # 現在の crontab を取得（存在しない場合は空）
 crontab -l > /tmp/crontab.current 2>/dev/null || touch /tmp/crontab.current
 
