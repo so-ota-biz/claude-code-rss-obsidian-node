@@ -21,7 +21,7 @@
 sudo systemctl status cron
 
 # 昨日 23:00 UTC 前後の cron ログを確認
-sudo grep 'CRON\|cron' /var/log/syslog | grep '$(date -u -d "yesterday" +%b\ %d)' | grep '23:'
+sudo grep -E 'CRON|cron' /var/log/syslog | grep "$(date -u -d 'yesterday' '+%b %e')" | grep '23:'
 
 # journalctl を使う場合
 sudo journalctl -u cron --since "yesterday 22:50" --until "yesterday 23:10"
@@ -110,8 +110,18 @@ docker logs --tail 200 rsshub-redis 2>&1 | grep -i 'error\|warn'
 # バッチ終了時のログを確認
 grep -E '\[info\].*(完了|success|upload|write)' /home/deploy/logs/claude-code-digest.log | tail -20
 
-# Dropbox トークンが期限切れでないか
-cat /home/deploy/claude-code-rss/.state/dropbox-tokens.json | python3 -m json.tool
+# Dropbox トークンが期限切れでないか（機密値は表示しない）
+python3 - <<'PY'
+import json
+from pathlib import Path
+p = Path("/home/deploy/claude-code-rss/.state/dropbox-tokens.json")
+d = json.loads(p.read_text())
+print({
+  "expires_at": d.get("expires_at"),
+  "has_access_token": bool(d.get("access_token")),
+  "has_refresh_token": bool(d.get("refresh_token")),
+})
+PY
 
 # 環境変数が正しく読み込まれているか（.env ファイル確認）
 grep 'DROPBOX_\|STORAGE_TYPE\|GEMINI_API_KEY' /home/deploy/claude-code-rss/.env | \
@@ -153,7 +163,7 @@ sudo journalctl --since "yesterday 20:00" --until "today 03:00" -p err
 
 ## 調査結果の記録テンプレート
 
-```
+```text
 調査日時: 
 対象実行予定: YYYY-MM-DD 08:00 JST (前日 23:00 UTC)
 
